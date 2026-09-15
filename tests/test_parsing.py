@@ -7,6 +7,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import gitmsg
 
 
+def setUpModule():
+    # 이 기계의 로케일이나 앞서 실행된 테스트에 결과가 좌우되지 않도록 고정한다.
+    gitmsg.set_lang("ko")
+
 class ExtractIssueKeyTest(unittest.TestCase):
     def test_bare_key_branch(self):
         self.assertEqual(gitmsg.extract_issue_key("ABC7-24"), "ABC7-24")

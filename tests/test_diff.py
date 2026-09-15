@@ -7,6 +7,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import gitmsg
 
 
+def setUpModule():
+    # 이 기계의 로케일이나 앞서 실행된 테스트에 결과가 좌우되지 않도록 고정한다.
+    gitmsg.set_lang("ko")
+
 def make_file(path, body="@@ -1 +1 @@\n+x\n", status="M"):
     return {"path": path, "status": status, "body": body, "truncated": False}
 

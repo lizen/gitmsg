@@ -13,6 +13,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import gitmsg
 import helpers
 
+def setUpModule():
+    # 이 기계의 로케일이나 앞서 실행된 테스트에 결과가 좌우되지 않도록 고정한다.
+    gitmsg.set_lang("ko")
+
 
 class FakeResponse:
     def __init__(self, payload):
@@ -236,7 +240,7 @@ class MainTest(CliTestCase):
             "이슈 키: ABC-7 — 제목 맨 앞에 `ABC-7 ` 형태로 넣어라.", user
         )
         # mode 슬롯: 이번 변경이 staged 라는 라벨이 그대로 나온다
-        self.assertIn("대상: " + gitmsg.MODE_LABEL["staged"], user)
+        self.assertIn(gitmsg._t("lbl_target") + gitmsg.mode_label("staged"), user)
         # kept 파일: 경로와 diff 본문이 함께 있어야 한다
         self.assertIn("- M a.txt", user)
         self.assertIn("+two", user)

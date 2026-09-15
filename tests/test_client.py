@@ -14,6 +14,10 @@ URL = "http://127.0.0.1:8080"
 MESSAGES = [{"role": "user", "content": "hi"}]
 FAKE_KEY = "sk-test-do-not-leak-12345"
 
+def setUpModule():
+    # 이 기계의 로케일이나 앞서 실행된 테스트에 결과가 좌우되지 않도록 고정한다.
+    gitmsg.set_lang("ko")
+
 
 class FakeResponse:
     def __init__(self, payload):

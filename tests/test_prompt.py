@@ -8,6 +8,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import gitmsg
 
 
+def setUpModule():
+    # 이 기계의 로케일이나 앞서 실행된 테스트에 결과가 좌우되지 않도록 고정한다.
+    gitmsg.set_lang("ko")
+
 def build(**overrides):
     args = {
         "subjects": ["ABC-1858 갭분석 지원", "ABC-1857 수집 오류 수정"],
@@ -33,7 +37,7 @@ class BuildPromptTest(unittest.TestCase):
     def test_system_forbids_wrapping_and_commentary(self):
         system = build()[0]["content"]
         self.assertIn("코드 블록", system)
-        self.assertIn("같은 언어", system)
+        self.assertIn("같은 형식", system)  # 언어 규칙은 test_lang.py 담당
 
     def test_system_has_no_length_rule(self):
         # 히스토리에 50자 넘는 제목이 흔하므로 길이 지시를 넣지 않는다
