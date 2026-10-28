@@ -1,76 +1,102 @@
-# llm-gitmsg
+<h1 align="center">gitmsg</h1>
 
-Nativ 앱에 로드한 로컬 LLM으로 git 커밋 메시지 초안을 만드는 CLI.
+<p align="center">
+  <strong>Commit messages that sound like your repository, written by a local LLM.</strong>
+</p>
 
-저장소의 기존 커밋 히스토리를 few-shot 예시로 삼아 그 저장소의 스타일에 맞춘다.
-브랜치명에 이슈 키가 있으면 제목에 반드시 들어가게 보장한다.
+<p align="center">
+  A single-file CLI that drafts git commit messages with a model running in
+  <a href="https://github.com/Blaizzy/nativ">Nativ</a> on your Mac.
+</p>
 
-## 전제 조건
+<p align="center">
+  <img alt="Python 3.9+" src="https://img.shields.io/badge/Python-3.9%2B-3776AB?logo=python&logoColor=white">
+  <img alt="Zero dependencies" src="https://img.shields.io/badge/dependencies-0-2ea44f">
+  <img alt="macOS" src="https://img.shields.io/badge/macOS-Apple%20silicon-111111?logo=apple&logoColor=white">
+  <img alt="Runs locally" src="https://img.shields.io/badge/LLM-local%20via%20Nativ-6E5AE6">
+</p>
 
-1. Nativ 앱에서 **로컬 API 서버를 켠다**
-2. 모델을 로드한다 (`mlx-community/KAT-Coder-V2.5-Dev-OptiQ-4bit` 권장)
-3. 앱에서 API 키를 확인해 환경변수로 내보낸다
+gitmsg reads your staged diff, learns the commit style from the repository's own
+history, and asks a locally loaded model for a draft. Your code stays on your
+machine: by default the only network call goes to the Nativ server on `127.0.0.1`.
 
-   ```bash
-   export NATIV_API_KEY='...'
-   ```
+It is built for people who hop between many repositories with different
+conventions. There is no per-repository config to copy around — every repository
+teaches its own style through its history.
 
-   키는 이 저장소 어디에도 저장하지 않는다. 셸 설정 파일에 둔다면 권한을 `600`으로 둔다.
-   평소에는 `--api-key`로 직접 넘기지 말고 이 환경변수를 쓴다 — 커맨드라인 인자로 넘기면
-   `ps` 출력과 셸 히스토리에 키가 그대로 남는다.
-4. `~/.local/bin`이 PATH에 있다
+## Features
 
-Python은 macOS 기본 `python3`면 된다. 외부 의존성이 없어 가상환경도 필요 없다.
+| Feature | What you get |
+|---|---|
+| **Learns each repository's style** | The 25 most recent subjects and up to 3 commits with a body are sent as few-shot examples, so the draft follows whatever format the repository already uses. |
+| **Issue keys from the branch** | A key such as `ABC-102` in `feature/ABC-102` is guaranteed to appear in the subject, placed in the style the history uses (`ABC-1 ...`, `[ABC-1] ...` or `... (ABC-1)`). With no key in the branch, none is invented. |
+| **Diff budgeting** | Lock files, minified assets, build output (`dist/`, `build/`, `target/`, `node_modules/`) and binaries are reduced to their filenames. Bodies are capped at 6,000 characters per file and 48,000 in total, shrinking the largest files first. |
+| **Clean output** | Code fences, surrounding quotes and `Commit message:` prefixes the model adds are stripped. |
+| **Pipe-friendly** | Progress goes to stderr and only the message goes to stdout, so `gitmsg \| pbcopy` copies just the message. |
+| **Edit before committing** | `-e` opens `git commit -e` with the draft filled in. There is no path that commits without your confirmation. |
+| **English and Korean** | Output language is English by default; `--lang ko` switches both the CLI text and the commit message to Korean. |
+| **Zero dependencies** | One Python file using only the standard library. Works with the system `python3` on macOS. |
 
-## 언어 설정
+## How it works
 
-출력 언어는 `en`(기본)과 `ko` 중에서 고른다. 안내 문구와 커밋 메시지가 모두
-이 설정을 따른다.
-
-```bash
-gitmsg                    # 영어로 (기본)
-gitmsg --lang ko          # 이번 한 번만 한국어로
-export GITMSG_LANG=ko     # 항상 한국어로
+```mermaid
+flowchart LR
+    A["git diff --cached<br/>(falls back to git diff)"] --> B["Noise filter<br/>and size budget"]
+    H["git log<br/>recent commits"] --> C["Prompt"]
+    I["Branch name<br/>issue key"] --> C
+    B --> C
+    C -->|"POST /v1/chat/completions"| D["Nativ local server<br/>127.0.0.1:8080"]
+    D --> E["Post-process<br/>strip wrapping, enforce key"]
+    E --> F["stdout<br/>or git commit -e"]
 ```
 
-| 값 | 커밋 메시지 | 안내·오류·도움말 |
-|---|---|---|
-| `en` (기본) | 영어로 고정 | 영어 |
-| `ko` | 한국어로 고정 | 한국어 |
+1. Look at staged changes first. If nothing is staged, use tracked but unstaged changes.
+2. Keep only the filename for lock files, build artifacts and binaries.
+3. Fit diffs into the budget of 6,000 characters per file and 48,000 overall.
+4. Attach the last 25 commit subjects and up to 3 commits with a body as examples.
+5. Call `/v1/chat/completions` once.
+6. Strip code fences and quotes, and add the issue key if the model left it out.
 
-저장소 히스토리가 한국어여도 옵션을 주지 않으면 영어로 나온다. 한국어 저장소를
-주로 다룬다면 `GITMSG_LANG=ko`를 셸 설정에 넣어 두는 편이 편하다.
+## Requirements
 
-다른 언어를 추가하려면 `gitmsg.py`의 `MESSAGES` 딕셔너리에 키를 하나 더 넣고
-`SUPPORTED_LANGS`에 코드를 추가하면 된다. 두 언어의 키 집합과 `%s`/`%d` 개수가
-일치하는지는 테스트가 검사한다.
+- A Mac with Apple silicon running [Nativ](https://github.com/Blaizzy/nativ), with its
+  **local API server turned on** and a model loaded.
+  `mlx-community/KAT-Coder-V2.5-Dev-OptiQ-4bit` is recommended.
+- The Nativ API key, exported as `NATIV_API_KEY`. The server rejects requests without it.
+- Python 3.9 or newer (the macOS system `python3` is fine) and git.
 
-## 설치
+## Get started
 
-```bash
-git clone <저장소> ~/PersonalProject/llm-gitmsg
+### Install
+
+```sh
+git clone https://github.com/lizen/local-ai-commit.git ~/PersonalProject/llm-gitmsg
 cd ~/PersonalProject/llm-gitmsg
 chmod +x gitmsg.py
-ln -sf "$PWD/gitmsg.py" ~/.local/bin/gitmsg
+ln -sf "$PWD/gitmsg.py" ~/.local/bin/gitmsg   # make sure ~/.local/bin is on your PATH
 ```
 
-## 사용
+No virtual environment is needed.
 
-```bash
-# 현재 저장소의 스테이징된 변경으로 메시지 초안 출력
+### Set the API key
+
+Copy the key from the Nativ app and export it:
+
+```sh
+export NATIV_API_KEY='...'
+```
+
+The key is never stored in this repository. If you keep it in a shell profile, set
+that file's permissions to `600`. Prefer the environment variable over `--api-key`:
+a command-line argument shows up in `ps` output and your shell history.
+
+### First run
+
+Stage some changes and run:
+
+```sh
 gitmsg
-
-# 다른 저장소를 대상으로
-gitmsg ~/work/team-a/example-backend
-
-# 에디터에 초안을 채운 채 커밋 창 열기
-gitmsg -e
-
-# 프롬프트만 확인 (모델 호출 없음)
-gitmsg --print-prompt
 ```
-
-실행하면 대상 프로젝트 경로와 진행 상황을 먼저 보여 주고, 끝나면 결과를 따로 구분해 출력한다.
 
 ```
 Project: /Users/me/work/example-backend
@@ -80,42 +106,76 @@ Suggested commit message:
 ABC-102 Handle missing user in findById
 ```
 
-안내 문구는 stderr로, 커밋 메시지만 stdout으로 나간다. 그래서 `gitmsg | pbcopy`처럼
-파이프로 넘기면 메시지만 복사된다.
+## Usage
 
-| 옵션 | 설명 |
+```sh
+gitmsg                                 # draft from the current repository
+gitmsg ~/work/team-a/example-backend   # target another repository
+gitmsg -e                              # open the commit editor with the draft
+gitmsg --print-prompt                  # show the assembled prompt, no model call
+gitmsg | pbcopy                        # copy only the message
+```
+
+gitmsg works from any subdirectory: the path (default `.`) is resolved to the
+top level of the git repository that contains it.
+
+| Option | Description |
 |---|---|
-| `PATH` | 대상 저장소 경로. 생략하면 현재 디렉터리 |
-| `-e`, `--edit` | `git commit -e`로 에디터를 연다 |
-| `--model ID` | 모델 지정. 생략하면 로드된 첫 번째 |
-| `--url URL` | Nativ 주소. `GITMSG_URL` 환경변수로도 지정 가능 |
-| `--api-key KEY` | Nativ API 키. 생략하면 `NATIV_API_KEY` 환경변수. 평소 사용에는 권장하지 않음 — `ps`와 셸 히스토리에 노출됨 |
-| `--lang {en,ko}` | 출력 언어. 생략하면 `GITMSG_LANG` 환경변수, 그것도 없으면 `en` |
-| `--print-prompt` | 조립된 프롬프트만 출력하고 끝낸다 |
+| `PATH` | Target repository path. Defaults to the current directory. |
+| `-e`, `--edit` | Open the editor with `git commit -e`. |
+| `--model ID` | Model to use. Defaults to the first loaded model. |
+| `--url URL` | Nativ server URL. Also settable via `GITMSG_URL`. Defaults to `http://127.0.0.1:8080`. |
+| `--api-key KEY` | Nativ API key. Defaults to `NATIV_API_KEY`. Not recommended for everyday use. |
+| `--lang {en,ko}` | Output language. Defaults to `GITMSG_LANG`, then `en`. |
+| `--print-prompt` | Print the assembled prompt and exit. |
 
-## 동작
+### Output language
 
-1. `git diff --cached`를 먼저 본다. 비어 있으면 `git diff`로 내려간다
-2. lock 파일, 빌드 산출물, 바이너리는 diff 본문을 빼고 파일명만 남긴다
-3. 파일당 6,000자 / 전체 48,000자 예산 안에 맞춘다
-4. 최근 커밋 25건의 제목과, 본문이 있는 커밋 3건을 예시로 붙인다
-5. `/v1/chat/completions`를 한 번 호출한다
-6. 코드 블록·따옴표를 벗기고, 이슈 키가 빠졌으면 붙인다
+| Value | Commit message | CLI notices, errors, help |
+|---|---|---|
+| `en` (default) | Always English | English |
+| `ko` | Always Korean | Korean |
 
-## 실측 (2026-09-15, Apple Silicon Mac)
+```sh
+gitmsg --lang ko          # Korean for this run
+export GITMSG_LANG=ko     # Korean every time
+```
 
-모델: `mlx-community/KAT-Coder-V2.5-Dev-OptiQ-4bit` (Nativ 0.3.7)
+The language setting wins over the repository history: a repository with Korean
+commits still gets English messages unless you ask for Korean. If you mostly work
+in Korean repositories, put `GITMSG_LANG=ko` in your shell profile.
 
-| diff 규모 | 생성 시간 |
+To add a language, add a block to the `MESSAGES` dictionary in `gitmsg.py` and its
+code to `SUPPORTED_LANGS`. A test checks that every language has the same keys and
+the same `%s`/`%d` placeholders.
+
+### Exit codes
+
+| Code | Meaning |
 |---|---|
-| 1파일 2줄 (제목만 생성) | 5.6초 |
-| 1파일 약 15줄 (제목 + 본문 3줄) | 57초 |
+| `0` | Success |
+| `1` | Not a git repository, no changes, or an unsupported `GITMSG_LANG` value |
+| `2` | Nativ server, authentication or model problem, or an invalid command-line option |
 
-편차가 큽니다. 프롬프트 길이보다 **생성할 토큰 수**가 시간을 좌우합니다. 본문까지
-쓰는 커밋이면 1분 가까이 걸린다고 보는 편이 안전합니다. 급하면 먼저 돌려놓고
-다른 일을 하다 오는 쪽이 낫습니다.
+With `-e`, gitmsg returns the exit code of `git commit` itself, so a rejecting
+pre-commit hook or closing the editor without saving can also yield `1`.
 
-실제 생성 예 (브랜치 `feature/ABC-102`, 히스토리에 `ABC-100 ...` 접두 스타일):
+## Performance
+
+Measured on 2026-09-15 on an Apple silicon Mac with
+`mlx-community/KAT-Coder-V2.5-Dev-OptiQ-4bit` (Nativ 0.3.7):
+
+| Diff size | Generation time |
+|---|---|
+| 1 file, 2 lines (subject only) | 5.6 s |
+| 1 file, ~15 lines (subject + 3-line body) | 57 s |
+
+Time depends on how many tokens the model **generates**, much more than on prompt
+length. Expect close to a minute when the message needs a body.
+
+A real draft from that run, on branch `feature/ABC-102` in a repository whose
+history uses Korean subjects with an `ABC-100 ...` prefix. It was generated before
+English became the default, so today you would get it with `--lang ko`:
 
 ```
 ABC-102 findById 예외 처리 및 사용자 잠금 기능 추가
@@ -124,29 +184,25 @@ ABC-102 findById 예외 처리 및 사용자 잠금 기능 추가
 - lock: 사용자 잠금 설정 메서드 추가
 ```
 
-브랜치에서 뽑은 이슈 키가 히스토리와 같은 접두 스타일로 붙었고, 본문 언어도
-저장소 히스토리를 따라 한국어로 나왔습니다.
+The issue key from the branch landed in the same prefix style as the history.
 
-## 종료 코드
+## Development
 
-| 코드 | 의미 |
-|---|---|
-| 0 | 성공 |
-| 1 | 저장소가 아니거나 변경이 없음 |
-| 2 | Nativ 서버·인증·모델 문제 |
-
-`-e`를 쓰면 이 규칙에서 벗어난다 — `main`이 `git commit`의 종료 코드를 그대로 돌려주므로, pre-commit 훅이 거부하거나 에디터를 그냥 닫아 커밋을 취소해도 1이 나올 수 있다.
-
-## 테스트
-
-```bash
+```sh
 python3 -m unittest discover -s tests -v
 ```
 
-네트워크와 실제 저장소를 타지 않는다. git 연동 테스트는 임시 저장소를 만들어 쓴다.
+The tests never touch the network or your real repositories. Git integration tests
+create throwaway repositories in a temporary directory.
 
-## 설계 문서
+## Documentation
 
-- `docs/design.md` — 설계
-- `docs/decisions.md` — 결정 기록
-- `plans/2026-09-14-gitmsg.md` — 구현 계획
+Design notes are written in Korean.
+
+[Design](docs/design.md) | [Decision log](docs/decisions.md) | [Implementation plan](plans/2026-09-14-gitmsg.md)
+
+## Credits
+
+- [Nativ](https://github.com/Blaizzy/nativ) — the macOS app that serves the local
+  model through an OpenAI-compatible API.
+- [MLX](https://github.com/ml-explore/mlx) — the runtime behind the models Nativ serves.
