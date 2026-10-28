@@ -103,7 +103,7 @@ A few things to keep in mind:
 
 gitmsg is developed and tested on macOS. It uses only the cross-platform parts of
 the standard library, so it runs on Windows as well. Windows has had less testing,
-though, so please [open an issue](https://github.com/lizen/local-ai-commit/issues)
+though, so please [open an issue](https://github.com/lizen/gitmsg/issues)
 if something breaks there.
 
 ## Get started
@@ -111,8 +111,8 @@ if something breaks there.
 ### Install on macOS
 
 ```sh
-git clone https://github.com/lizen/local-ai-commit.git
-cd local-ai-commit
+git clone https://github.com/lizen/gitmsg.git
+cd gitmsg
 chmod +x gitmsg.py
 ln -sf "$PWD/gitmsg.py" ~/.local/bin/gitmsg   # make sure ~/.local/bin is on your PATH
 ```
@@ -120,8 +120,8 @@ ln -sf "$PWD/gitmsg.py" ~/.local/bin/gitmsg   # make sure ~/.local/bin is on you
 ### Install on Windows
 
 ```powershell
-git clone https://github.com/lizen/local-ai-commit.git
-cd local-ai-commit
+git clone https://github.com/lizen/gitmsg.git
+cd gitmsg
 python gitmsg.py --help
 ```
 
@@ -130,7 +130,7 @@ that is on your `PATH`, with this single line. Adjust the path to where you clon
 the repository:
 
 ```bat
-@python "%USERPROFILE%\local-ai-commit\gitmsg.py" %*
+@python "%USERPROFILE%\gitmsg\gitmsg.py" %*
 ```
 
 To customize gitmsg, fork the repository and clone your fork instead.
