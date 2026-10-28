@@ -14,6 +14,7 @@
   <img alt="Zero dependencies" src="https://img.shields.io/badge/dependencies-0-2ea44f">
   <img alt="macOS" src="https://img.shields.io/badge/macOS-Apple%20silicon-111111?logo=apple&logoColor=white">
   <img alt="Runs locally" src="https://img.shields.io/badge/LLM-local%20via%20Nativ-6E5AE6">
+  <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-blue"></a>
 </p>
 
 gitmsg reads your staged diff, learns the commit style from the repository's own
@@ -70,13 +71,14 @@ flowchart LR
 ### Install
 
 ```sh
-git clone https://github.com/lizen/local-ai-commit.git ~/PersonalProject/llm-gitmsg
-cd ~/PersonalProject/llm-gitmsg
+git clone https://github.com/lizen/local-ai-commit.git
+cd local-ai-commit
 chmod +x gitmsg.py
 ln -sf "$PWD/gitmsg.py" ~/.local/bin/gitmsg   # make sure ~/.local/bin is on your PATH
 ```
 
-No virtual environment is needed.
+No virtual environment is needed. To customize it, fork the repository and clone
+your fork instead.
 
 ### Set the API key
 
@@ -206,3 +208,8 @@ Design notes are written in Korean.
 - [Nativ](https://github.com/Blaizzy/nativ) — the macOS app that serves the local
   model through an OpenAI-compatible API.
 - [MLX](https://github.com/ml-explore/mlx) — the runtime behind the models Nativ serves.
+
+## License
+
+[MIT License](LICENSE). You are free to use, modify, fork and redistribute gitmsg,
+as long as the copyright and license notice are kept.
