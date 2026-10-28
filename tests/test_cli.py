@@ -40,7 +40,9 @@ class CliTestCase(unittest.TestCase):
         helpers.commit(self.repo, "ABC-100 첫 커밋")
         self._urlopen = gitmsg.urlopen
         self._run_commit = gitmsg.run_commit
+        os.environ.pop("GITMSG_LLM_URL", None)
         os.environ.pop("GITMSG_URL", None)
+        os.environ.pop("GITMSG_LLM_API_KEY", None)
         os.environ.pop("NATIV_API_KEY", None)
         # main() resets the language from GITMSG_LANG. Pin it, since these tests check Korean text.
         os.environ["GITMSG_LANG"] = "ko"
@@ -49,7 +51,9 @@ class CliTestCase(unittest.TestCase):
         gitmsg.urlopen = self._urlopen
         gitmsg.run_commit = self._run_commit
         shutil.rmtree(self.tmp, ignore_errors=True)
+        os.environ.pop("GITMSG_LLM_URL", None)
         os.environ.pop("GITMSG_URL", None)
+        os.environ.pop("GITMSG_LLM_API_KEY", None)
         os.environ.pop("NATIV_API_KEY", None)
         os.environ.pop("GITMSG_LANG", None)
         gitmsg.set_lang("ko")
@@ -96,15 +100,29 @@ class ParseArgsTest(unittest.TestCase):
 
 
 class ResolveUrlTest(unittest.TestCase):
-    def tearDown(self):
+    def setUp(self):
+        os.environ.pop("GITMSG_LLM_URL", None)
         os.environ.pop("GITMSG_URL", None)
 
+    def tearDown(self):
+        os.environ.pop("GITMSG_LLM_URL", None)
+        os.environ.pop("GITMSG_URL", None)
+
+    def test_legacy_env_is_still_read(self):
+        os.environ["GITMSG_URL"] = "http://legacy:1"
+        self.assertEqual(gitmsg.resolve_url(None), "http://legacy:1")
+
+    def test_new_env_beats_legacy_env(self):
+        os.environ["GITMSG_LLM_URL"] = "http://env:1"
+        os.environ["GITMSG_URL"] = "http://legacy:1"
+        self.assertEqual(gitmsg.resolve_url(None), "http://env:1")
+
     def test_explicit_wins(self):
-        os.environ["GITMSG_URL"] = "http://env:1"
+        os.environ["GITMSG_LLM_URL"] = "http://env:1"
         self.assertEqual(gitmsg.resolve_url("http://flag:2"), "http://flag:2")
 
     def test_env_is_second(self):
-        os.environ["GITMSG_URL"] = "http://env:1"
+        os.environ["GITMSG_LLM_URL"] = "http://env:1"
         self.assertEqual(gitmsg.resolve_url(None), "http://env:1")
 
     def test_default_is_last(self):
@@ -112,19 +130,32 @@ class ResolveUrlTest(unittest.TestCase):
 
 
 class ResolveApiKeyTest(unittest.TestCase):
+    def setUp(self):
+        os.environ.pop("GITMSG_LLM_API_KEY", None)
+        os.environ.pop("NATIV_API_KEY", None)
+
     def tearDown(self):
+        os.environ.pop("GITMSG_LLM_API_KEY", None)
         os.environ.pop("NATIV_API_KEY", None)
 
     def test_explicit_wins(self):
-        os.environ["NATIV_API_KEY"] = "from-env"
+        os.environ["GITMSG_LLM_API_KEY"] = "from-env"
         self.assertEqual(gitmsg.resolve_api_key("from-flag"), "from-flag")
 
     def test_env_is_second(self):
-        os.environ["NATIV_API_KEY"] = "from-env"
+        os.environ["GITMSG_LLM_API_KEY"] = "from-env"
+        self.assertEqual(gitmsg.resolve_api_key(None), "from-env")
+
+    def test_legacy_nativ_env_is_still_read(self):
+        os.environ["NATIV_API_KEY"] = "from-legacy"
+        self.assertEqual(gitmsg.resolve_api_key(None), "from-legacy")
+
+    def test_gitmsg_env_beats_legacy_env(self):
+        os.environ["GITMSG_LLM_API_KEY"] = "from-env"
+        os.environ["NATIV_API_KEY"] = "from-legacy"
         self.assertEqual(gitmsg.resolve_api_key(None), "from-env")
 
     def test_no_key_returns_none(self):
-        os.environ.pop("NATIV_API_KEY", None)
         self.assertIsNone(gitmsg.resolve_api_key(None))
 
 
@@ -292,7 +323,7 @@ class MainTest(CliTestCase):
         self.assertIn("BODY-ONLY-MARKER 상세 설명", body_section)
         self.assertNotIn("SUBJECT-ONLY-MARKER", body_section)
 
-    def test_nativ_down_exits_2(self):
+    def test_llm_server_down_exits_2(self):
         self.stage_a_change()
 
         def refuse(request, timeout=None):
@@ -301,7 +332,7 @@ class MainTest(CliTestCase):
 
         code, _, err = self.run_main([self.repo])
         self.assertEqual(code, 2)
-        self.assertIn("꺼져 있습니다", err)
+        self.assertIn("연결할 수 없습니다", err)
 
     def test_edit_flag_calls_git_commit(self):
         self.stage_a_change()
@@ -328,7 +359,7 @@ class MainTest(CliTestCase):
 
         code, _, err = self.run_main([self.repo])
         self.assertEqual(code, 2)
-        self.assertIn("NATIV_API_KEY", err)
+        self.assertIn("GITMSG_LLM_API_KEY", err)
 
     def test_falls_back_to_worktree_changes(self):
         helpers.write(self.repo, "a.txt", "one\nunstaged\n")

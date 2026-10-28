@@ -301,7 +301,7 @@ complete(url, model, messages, api_key)     POST {url}/v1/chat/completions
 ```
 
 모델은 `--model` 지정이 없으면 `/v1/models` 첫 번째를 쓴다.
-주소는 `--url` > `GITMSG_URL` 환경변수 > `http://127.0.0.1:8080` 순으로 결정한다.
+주소는 `--url` > `GITMSG_LLM_URL` 환경변수 > `http://127.0.0.1:8080` 순으로 결정한다.
 API 키는 `--api-key` > `NATIV_API_KEY` 환경변수 순으로 결정한다. 기본값은 없다.
 
 키를 코드에 박지 않고 환경변수로만 받는 이유는, 키가 앱이 발급한 자격 증명이라

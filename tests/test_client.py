@@ -132,9 +132,16 @@ class PickModelTest(ClientTestCase):
 
     def test_no_models_raises(self):
         self.respond_with({"data": []})
-        with self.assertRaises(gitmsg.NativError) as ctx:
+        with self.assertRaises(gitmsg.LLMError) as ctx:
             gitmsg.pick_model(URL)
-        self.assertIn("모델이 로드되지 않았습니다", str(ctx.exception))
+        self.assertIn("사용할 수 있는 모델이 없습니다", str(ctx.exception))
+
+    def test_null_model_list_raises_instead_of_crashing(self):
+        # Ollama with no pulled models answers {"object": "list", "data": null}.
+        self.respond_with({"object": "list", "data": None})
+        with self.assertRaises(gitmsg.LLMError) as ctx:
+            gitmsg.pick_model(URL)
+        self.assertIn("사용할 수 있는 모델이 없습니다", str(ctx.exception))
 
     def test_passes_api_key_through(self):
         captured = {}
@@ -144,15 +151,15 @@ class PickModelTest(ClientTestCase):
 
 
 class MalformedResponseTest(ClientTestCase):
-    def test_malformed_json_raises_native_error(self):
+    def test_malformed_json_raises_llm_error(self):
         self.respond_with_raw(b"not valid json{")
-        with self.assertRaises(gitmsg.NativError) as ctx:
+        with self.assertRaises(gitmsg.LLMError) as ctx:
             gitmsg.list_models(URL)
         self.assertIn("해석할 수 없습니다", str(ctx.exception))
 
-    def test_non_dict_top_level_raises_native_error(self):
+    def test_non_dict_top_level_raises_llm_error(self):
         self.respond_with([1, 2, 3])
-        with self.assertRaises(gitmsg.NativError) as ctx:
+        with self.assertRaises(gitmsg.LLMError) as ctx:
             gitmsg.list_models(URL)
         self.assertIn("해석할 수 없습니다", str(ctx.exception))
 
@@ -179,44 +186,44 @@ class CompleteTest(ClientTestCase):
 
     def test_missing_choices_raises(self):
         self.respond_with({"choices": []})
-        with self.assertRaises(gitmsg.NativError):
+        with self.assertRaises(gitmsg.LLMError):
             gitmsg.complete(URL, "m1", MESSAGES)
 
     def test_connection_refused_explains_server_is_off(self):
         self.raise_with(URLError(ConnectionRefusedError(61, "Connection refused")))
-        with self.assertRaises(gitmsg.NativError) as ctx:
+        with self.assertRaises(gitmsg.LLMError) as ctx:
             gitmsg.complete(URL, "m1", MESSAGES)
         message = str(ctx.exception)
-        self.assertIn("꺼져 있습니다", message)
+        self.assertIn("연결할 수 없습니다", message)
         self.assertIn(URL, message)
 
     def test_timeout_message(self):
         self.raise_with(socket.timeout())
-        with self.assertRaises(gitmsg.NativError) as ctx:
+        with self.assertRaises(gitmsg.LLMError) as ctx:
             gitmsg.complete(URL, "m1", MESSAGES)
-        self.assertIn("응답이", str(ctx.exception))
+        self.assertIn("응답하지 않았습니다", str(ctx.exception))
 
     def test_url_error_wrapped_timeout_message(self):
         # A timeout during connect (SYN) may be raised by urlopen as
         # socket.timeout wrapped in URLError. It must produce the same
         # message as a bare socket.timeout.
         self.raise_with(URLError(socket.timeout()))
-        with self.assertRaises(gitmsg.NativError) as ctx:
+        with self.assertRaises(gitmsg.LLMError) as ctx:
             gitmsg.complete(URL, "m1", MESSAGES)
-        self.assertIn("응답이", str(ctx.exception))
+        self.assertIn("응답하지 않았습니다", str(ctx.exception))
 
     def test_http_error_includes_status(self):
         self.raise_with(HTTPError(URL, 500, "Internal Server Error", {}, None))
-        with self.assertRaises(gitmsg.NativError) as ctx:
+        with self.assertRaises(gitmsg.LLMError) as ctx:
             gitmsg.complete(URL, "m1", MESSAGES)
         self.assertIn("500", str(ctx.exception))
 
     def test_unauthorized_points_at_the_api_key(self):
         self.raise_with(HTTPError(URL, 401, "Unauthorized", {}, None))
-        with self.assertRaises(gitmsg.NativError) as ctx:
+        with self.assertRaises(gitmsg.LLMError) as ctx:
             gitmsg.complete(URL, "m1", MESSAGES)
         message = str(ctx.exception)
-        self.assertIn("NATIV_API_KEY", message)
+        self.assertIn("GITMSG_LLM_API_KEY", message)
         self.assertIn("올바르지 않습니다", message)
 
     def test_sends_bearer_token(self):
@@ -232,7 +239,7 @@ class CompleteTest(ClientTestCase):
             '{"detail":"debug trace - Authorization: Bearer %s"}' % FAKE_KEY
         ).encode("utf-8")
         self.raise_with(HTTPError(URL, 500, "Internal Server Error", {}, io.BytesIO(body)))
-        with self.assertRaises(gitmsg.NativError) as ctx:
+        with self.assertRaises(gitmsg.LLMError) as ctx:
             gitmsg.complete(URL, "m1", MESSAGES, api_key=FAKE_KEY)
         message = str(ctx.exception)
         self.assertNotIn(FAKE_KEY, message)
@@ -248,7 +255,7 @@ class CompleteTest(ClientTestCase):
         ]
         for error in errors:
             self.raise_with(error)
-            with self.assertRaises(gitmsg.NativError) as ctx:
+            with self.assertRaises(gitmsg.LLMError) as ctx:
                 gitmsg.complete(URL, "m1", MESSAGES, api_key=FAKE_KEY)
             self.assertNotIn(FAKE_KEY, str(ctx.exception))
 
@@ -256,7 +263,7 @@ class CompleteTest(ClientTestCase):
         # Masking must happen before truncating to 200 chars. In the wrong order
         # (truncate first, mask later) a key straddling the 200th char is missed
         # by .replace() and its leading fragment leaks. If an attacker controls
-        # --url/GITMSG_URL, shifting the padding bit by bit recovers the whole key.
+        # --url/GITMSG_LLM_URL, shifting the padding bit by bit recovers the whole key.
         canary = "sk-test-canary-ABCDEFGHIJKLMNO"  # 30 chars
         pad = "A" * 180
         body = (pad + canary).encode("utf-8")
@@ -264,7 +271,7 @@ class CompleteTest(ClientTestCase):
         leaked_fragment_if_buggy = canary[:200 - len(pad)]
 
         self.raise_with(HTTPError(URL, 500, "Internal Server Error", {}, io.BytesIO(body)))
-        with self.assertRaises(gitmsg.NativError) as ctx:
+        with self.assertRaises(gitmsg.LLMError) as ctx:
             gitmsg.complete(URL, "m1", MESSAGES, api_key=canary)
         message = str(ctx.exception)
         self.assertNotIn(canary, message)

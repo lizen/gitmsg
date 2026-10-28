@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Draft a git commit message with a Nativ local LLM."""
+"""Draft a git commit message with a local LLM or any OpenAI-compatible API."""
 
 import argparse
 import fnmatch
@@ -28,17 +28,17 @@ MESSAGES = {
         "path_not_found": "경로를 찾을 수 없습니다: %s",
         "repo_unreadable": "git 저장소를 읽을 수 없습니다: %s",
         "no_changes": "스테이징된 변경도, 추적 중인 변경도 없습니다.",
-        "nativ_bad_response": "Nativ 응답을 해석할 수 없습니다.",
-        "nativ_http_error": "Nativ 응답 오류 %d: %s",
-        "nativ_timeout": "Nativ 응답이 %d초 안에 오지 않았습니다.",
-        "nativ_conn_failed": "Nativ 연결 실패: %s",
-        "nativ_server_off": "Nativ 로컬 API 서버가 꺼져 있습니다. "
-                            "Nativ 앱에서 API 서버를 켜세요. (주소: %s)",
-        "nativ_unauthorized": "Nativ API 키가 없거나 올바르지 않습니다. "
-                              "NATIV_API_KEY 환경변수를 확인하세요.",
-        "nativ_no_model": "모델이 로드되지 않았습니다. Nativ 앱에서 모델을 로드하세요.",
-        "nativ_no_choices": "Nativ 응답에 결과가 없습니다.",
-        "empty_response": "Nativ가 빈 응답을 돌려줬습니다.",
+        "llm_bad_response": "LLM 서버 응답을 해석할 수 없습니다.",
+        "llm_http_error": "LLM 서버 응답 오류 %d: %s",
+        "llm_timeout": "LLM 서버가 %d초 안에 응답하지 않았습니다.",
+        "llm_conn_failed": "LLM 서버에 연결할 수 없습니다: %s",
+        "llm_server_off": "LLM 서버에 연결할 수 없습니다. 서버가 실행 중인지, "
+                          "--url 또는 GITMSG_LLM_URL 이 맞는지 확인하세요. (주소: %s)",
+        "llm_unauthorized": "API 키가 없거나 올바르지 않습니다. "
+                            "GITMSG_LLM_API_KEY 환경변수를 확인하세요.",
+        "llm_no_model": "사용할 수 있는 모델이 없습니다. 서버에 모델을 로드하거나 --model 로 지정하세요.",
+        "llm_no_choices": "LLM 응답에 결과가 없습니다.",
+        "empty_response": "LLM이 빈 응답을 돌려줬습니다.",
         "unknown_lang": "지원하지 않는 언어입니다: %s (사용 가능: %s)",
         # Progress notices (stderr)
         "status_repo": "프로젝트: %s",
@@ -49,8 +49,8 @@ MESSAGES = {
         "cli_path_help": "대상 저장소 경로 (기본: 현재 디렉터리)",
         "cli_edit_help": "git commit -e 로 에디터를 연다",
         "cli_model_help": "사용할 모델 id",
-        "cli_url_help": "Nativ 주소 (기본: %s)",
-        "cli_api_key_help": "Nativ API 키 (기본: NATIV_API_KEY 환경변수). "
+        "cli_url_help": "OpenAI 호환 API 주소 (기본: GITMSG_LLM_URL 또는 %s)",
+        "cli_api_key_help": "API 키 (기본: GITMSG_LLM_API_KEY 환경변수). "
                             "명령줄에 쓰면 ps 에 노출되므로 환경변수를 권장한다",
         "cli_print_prompt_help": "LLM 호출 없이 조립된 프롬프트만 출력",
         "cli_lang_help": "출력 언어: en|ko (기본: GITMSG_LANG 또는 en)",
@@ -90,17 +90,17 @@ MESSAGES = {
         "path_not_found": "Path not found: %s",
         "repo_unreadable": "Could not read the git repository: %s",
         "no_changes": "No staged changes and no tracked changes.",
-        "nativ_bad_response": "Could not parse the Nativ response.",
-        "nativ_http_error": "Nativ responded with an error %d: %s",
-        "nativ_timeout": "Nativ did not respond within %d seconds.",
-        "nativ_conn_failed": "Could not connect to Nativ: %s",
-        "nativ_server_off": "The Nativ local API server is not running. "
-                            "Start it in the Nativ app. (url: %s)",
-        "nativ_unauthorized": "The Nativ API key is missing or invalid. "
-                              "Check the NATIV_API_KEY environment variable.",
-        "nativ_no_model": "No model is loaded. Load one in the Nativ app.",
-        "nativ_no_choices": "The Nativ response contained no result.",
-        "empty_response": "Nativ returned an empty response.",
+        "llm_bad_response": "Could not parse the LLM server response.",
+        "llm_http_error": "The LLM server responded with an error %d: %s",
+        "llm_timeout": "The LLM server did not respond within %d seconds.",
+        "llm_conn_failed": "Could not connect to the LLM server: %s",
+        "llm_server_off": "Could not connect to the LLM server. Check that it is running "
+                          "and that --url or GITMSG_LLM_URL is correct. (url: %s)",
+        "llm_unauthorized": "The API key is missing or invalid. "
+                            "Check the GITMSG_LLM_API_KEY environment variable.",
+        "llm_no_model": "No model is available. Load one on the server or pass --model.",
+        "llm_no_choices": "The LLM response contained no result.",
+        "empty_response": "The LLM returned an empty response.",
         "unknown_lang": "Unsupported language: %s (supported: %s)",
         "status_repo": "Project: %s",
         "status_analyzing": "Analyzing changes...",
@@ -109,8 +109,8 @@ MESSAGES = {
         "cli_path_help": "target repository path (default: current directory)",
         "cli_edit_help": "open the editor with git commit -e",
         "cli_model_help": "model id to use",
-        "cli_url_help": "Nativ url (default: %s)",
-        "cli_api_key_help": "Nativ API key (default: NATIV_API_KEY env var). "
+        "cli_url_help": "OpenAI-compatible API url (default: GITMSG_LLM_URL or %s)",
+        "cli_api_key_help": "API key (default: GITMSG_LLM_API_KEY env var). "
                             "Passing it here exposes it in ps; prefer the env var",
         "cli_print_prompt_help": "print the assembled prompt without calling the LLM",
         "cli_lang_help": "output language: en|ko (default: GITMSG_LANG or en)",
@@ -219,7 +219,7 @@ def _git(repo: str, *args: str) -> str:
              "-c", "core.quotePath=false",
              "-c", "diff.mnemonicPrefix=false",
              "-c", "diff.noprefix=false"] + list(args),
-            capture_output=True, text=True, errors="replace",
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
         )
     except OSError as error:
         raise GitError(_t("git_exec_failed") % error)
@@ -515,15 +515,15 @@ def build_prompt(
 
 
 # --------------------------------------------------------------------------
-# Nativ client
+# LLM client (OpenAI-compatible API)
 # --------------------------------------------------------------------------
 
 DEFAULT_URL = "http://127.0.0.1:8080"
 DEFAULT_TIMEOUT = 180
 
 
-class NativError(Exception):
-    """Raised when a call to the Nativ local API fails."""
+class LLMError(Exception):
+    """Raised when a call to the LLM server fails."""
 
 
 def _request(url: str, path: str, payload, timeout: int, api_key: Optional[str] = None):
@@ -547,14 +547,14 @@ def _request(url: str, path: str, payload, timeout: int, api_key: Optional[str] 
         try:
             data = json.loads(raw)
         except json.JSONDecodeError:
-            raise NativError(_t("nativ_bad_response"))
+            raise LLMError(_t("llm_bad_response"))
         if not isinstance(data, dict):
-            raise NativError(_t("nativ_bad_response"))
+            raise LLMError(_t("llm_bad_response"))
         return data
     except HTTPError as error:
         if error.code == 401:
             # Never print the key value itself
-            raise NativError(_t("nativ_unauthorized"))
+            raise LLMError(_t("llm_unauthorized"))
         detail = ""
         try:
             detail = error.read().decode("utf-8", "replace")
@@ -563,20 +563,21 @@ def _request(url: str, path: str, payload, timeout: int, api_key: Optional[str] 
         if api_key and detail:
             detail = detail.replace(api_key, "***")
         detail = detail[:200]
-        raise NativError(_t("nativ_http_error") % (error.code, detail or error.reason))
+        raise LLMError(_t("llm_http_error") % (error.code, detail or error.reason))
     except URLError as error:
         if isinstance(error.reason, ConnectionRefusedError):
-            raise NativError(_t("nativ_server_off") % url)
+            raise LLMError(_t("llm_server_off") % url)
         if isinstance(error.reason, socket.timeout):
-            raise NativError(_t("nativ_timeout") % timeout)
-        raise NativError(_t("nativ_conn_failed") % error.reason)
+            raise LLMError(_t("llm_timeout") % timeout)
+        raise LLMError(_t("llm_conn_failed") % error.reason)
     except socket.timeout:
-        raise NativError(_t("nativ_timeout") % timeout)
+        raise LLMError(_t("llm_timeout") % timeout)
 
 
 def list_models(url: str, api_key: Optional[str] = None, timeout: int = 10) -> "list[str]":
     payload = _request(url, "/v1/models", None, timeout, api_key)
-    return [item.get("id", "") for item in payload.get("data", [])]
+    # Ollama with no pulled models returns "data": null rather than [].
+    return [item.get("id", "") for item in payload.get("data") or []]
 
 
 def pick_model(
@@ -590,7 +591,7 @@ def pick_model(
         return explicit
     models = list_models(url, api_key, timeout)
     if not models:
-        raise NativError(_t("nativ_no_model"))
+        raise LLMError(_t("llm_no_model"))
     return models[0]
 
 
@@ -611,7 +612,7 @@ def complete(
     data = _request(url, "/v1/chat/completions", payload, timeout, api_key)
     choices = data.get("choices") or []
     if not choices:
-        raise NativError(_t("nativ_no_choices"))
+        raise LLMError(_t("llm_no_choices"))
     return choices[0].get("message", {}).get("content", "")
 
 
@@ -729,12 +730,16 @@ def parse_args(argv=None):
 
 
 def resolve_url(explicit: Optional[str]) -> str:
-    return explicit or os.environ.get("GITMSG_URL") or DEFAULT_URL
+    # GITMSG_URL is read for backward compatibility with older setups.
+    return (explicit or os.environ.get("GITMSG_LLM_URL")
+            or os.environ.get("GITMSG_URL") or DEFAULT_URL)
 
 
 def resolve_api_key(explicit: Optional[str]) -> Optional[str]:
     """Find the API key. There is no default, so no key is hard-coded."""
-    return explicit or os.environ.get("NATIV_API_KEY") or None
+    # NATIV_API_KEY is read for backward compatibility with older setups.
+    return (explicit or os.environ.get("GITMSG_LLM_API_KEY")
+            or os.environ.get("NATIV_API_KEY") or None)
 
 
 def resolve_lang(explicit: Optional[str]) -> str:
@@ -808,7 +813,7 @@ def main(argv=None) -> int:
     try:
         model = pick_model(url, args.model, api_key)
         raw = complete(url, model, messages, api_key)
-    except NativError as error:
+    except LLMError as error:
         print(str(error), file=sys.stderr)
         return 2
 

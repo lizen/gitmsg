@@ -138,6 +138,34 @@ map-reduce(파일별 요약 후 통합)는 대형 리팩터링에 강하지만,
 헷갈렸다. `GITMSG_LANG=auto`로 설정해 둔 환경은 이제 오류로 끝나며 유효값을
 안내한다.
 
+### Nativ 전용에서 OpenAI 호환 API 범용으로 넓혔다 (2026-10-28)
+
+저장소를 공개하고 보니 사용자 중에 Windows 사용자도 섞여 있다. Nativ는 macOS
+전용이라 README와 오류 문구가 Nativ를 전제하면 Windows 사용자는 쓸 수가 없다.
+
+클라이언트 코드는 원래부터 Nativ에 묶여 있지 않았다. `<url>/v1/models`와
+`<url>/v1/chat/completions`를 부르고 키가 있으면 Bearer 헤더로 보낼 뿐이라
+Ollama, LM Studio, llama.cpp, OpenAI 같은 OpenAI 호환 서버면 그대로 붙는다.
+바뀐 것은 문구와 이름이다.
+
+- 오류·도움말 문구에서 Nativ를 "LLM 서버"로 바꾸고, 서버 연결 실패 시
+  `--url`/`GITMSG_LLM_URL`을 확인하라고 안내한다
+- 환경변수는 `GITMSG_LLM_URL`, `GITMSG_LLM_API_KEY`로 정했다. 예전 이름인
+  `GITMSG_URL`, `NATIV_API_KEY`도 계속 읽어 기존 설정을 깨지 않는다
+- 접두사 없는 `LLM_URL`/`LLM_API_KEY`도 검토했지만 버렸다. 다른 도구(예:
+  OpenHands의 `LLM_API_KEY`)와 겹치면 diff나 키가 의도하지 않은 서버로 간다.
+  `GITMSG_` 접두사로 이름 공간을 지키고, `LLM_`으로 무엇의 설정인지 드러낸다
+- `NativError`는 `LLMError`로 바꿨다
+- 기본 주소 `http://127.0.0.1:8080`은 그대로 둔다. llama.cpp server와
+  Nativ의 기본 포트라 기존 사용자에게 영향이 없다
+
+함께 고친 것 두 가지:
+
+- Ollama는 받은 모델이 없으면 `/v1/models`에 `"data": null`을 돌려준다.
+  이때 트레이스백으로 죽던 것을 "사용할 수 있는 모델이 없다" 안내로 바꿨다
+- git 출력을 `encoding="utf-8"`로 읽는다. 지정하지 않으면 Windows에서는
+  시스템 코드페이지(cp949 등)로 디코딩해 한글 diff가 깨진다
+
 ### 이슈 키 "강제"의 범위를 좁혔다
 
 브랜치명에 키가 없는 경우가 생각보다 많았다. `dev`, `master`, `release-adv`,
