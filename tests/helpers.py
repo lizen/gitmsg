@@ -3,7 +3,7 @@ import subprocess
 
 
 def git(repo, *args):
-    """저장소에서 git을 실행하고 stdout을 돌려준다. 실패하면 예외."""
+    """Run git in the repository and return stdout. Raises on failure."""
     proc = subprocess.run(
         ["git", "-C", repo] + list(args),
         check=True, capture_output=True, text=True,
@@ -12,7 +12,7 @@ def git(repo, *args):
 
 
 def make_repo(path):
-    """테스트용 git 저장소를 만든다. 전역 설정에 영향받지 않도록 고정값을 넣는다."""
+    """Create a test git repository, pinning settings so global config does not leak in."""
     os.makedirs(path, exist_ok=True)
     subprocess.run(["git", "init", "-q", "-b", "main", path], check=True)
     git(path, "config", "user.email", "tester@example.com")

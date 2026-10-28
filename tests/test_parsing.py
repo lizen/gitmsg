@@ -8,7 +8,7 @@ import gitmsg
 
 
 def setUpModule():
-    # 이 기계의 로케일이나 앞서 실행된 테스트에 결과가 좌우되지 않도록 고정한다.
+    # Pin the language so results do not depend on tests that ran earlier.
     gitmsg.set_lang("ko")
 
 class ExtractIssueKeyTest(unittest.TestCase):
@@ -62,8 +62,8 @@ class DetectKeyStyleTest(unittest.TestCase):
         self.assertEqual(gitmsg.detect_key_style(subjects), "prefix")
 
     def test_unclassifiable_position_is_ignored(self):
-        # "[DQ] DEF-166 ..." 은 키가 대괄호 안도, 괄호 접미도, 문장 맨 앞도 아니다.
-        # 세지 않고 넘어가므로 나머지 하나가 결과를 정한다.
+        # In "[DQ] DEF-166 ..." the key is neither in brackets, a parenthesized
+        # suffix, nor at the very start. It is skipped, so the remaining one decides.
         subjects = [
             "[DQ] DEF-166 샘플링 적용 안되는 오류 수정",
             "ABC-1858 갭분석 지원",

@@ -14,7 +14,7 @@ import gitmsg
 import helpers
 
 def setUpModule():
-    # 이 기계의 로케일이나 앞서 실행된 테스트에 결과가 좌우되지 않도록 고정한다.
+    # Pin the language so results do not depend on tests that ran earlier.
     gitmsg.set_lang("ko")
 
 
@@ -42,7 +42,7 @@ class CliTestCase(unittest.TestCase):
         self._run_commit = gitmsg.run_commit
         os.environ.pop("GITMSG_URL", None)
         os.environ.pop("NATIV_API_KEY", None)
-        # main() 은 GITMSG_LANG 으로 언어를 다시 정한다. 한국어 문구를 검사하므로 고정한다.
+        # main() resets the language from GITMSG_LANG. Pin it, since these tests check Korean text.
         os.environ["GITMSG_LANG"] = "ko"
 
     def tearDown(self):
@@ -145,8 +145,8 @@ class MainTest(CliTestCase):
         self.assertNotIn("Traceback", err)
 
     def test_euckr_staged_file_does_not_crash_the_cli(self):
-        """디코딩이 관대해졌으니 EUC-KR 내용이 섞여도 정상 흐름을 그대로
-        타야 한다 — 대체 문자가 섞인 diff라도 커밋 메시지 생성까지 이어진다."""
+        """Decoding is lenient now, so EUC-KR content must still go through the
+        normal flow: a diff with replacement characters still yields a commit message."""
         path = os.path.join(self.repo, "Legacy.java")
         with open(path, "wb") as fh:
             fh.write("사용자 정보 처리 및 예외 클래스 정의".encode("euc-kr"))
@@ -185,7 +185,7 @@ class MainTest(CliTestCase):
         self.assertEqual(out.strip(), "두 번째 줄 추가")
 
     def test_shows_progress_and_result_header_on_stderr(self):
-        """진행 안내는 stderr 로만 나가야 파이프(gitmsg | pbcopy)가 깨지지 않는다."""
+        """Progress notices must go to stderr only, so piping (gitmsg | pbcopy) keeps working."""
         self.stage_a_change()
         self.answer("두 번째 줄 추가")
         code, out, err = self.run_main([self.repo])
@@ -241,15 +241,15 @@ class MainTest(CliTestCase):
         self.assertIn("+two", out)
 
     def test_print_prompt_places_each_value_in_its_slot(self):
-        """build_prompt에 넘기는 8개 위치 인자가 뒤바뀌면 렌더링된 각 자리가
-        어긋난다는 것을 확인한다. 인접한 두 인자를 바꿔치기해도 예외 없이
-        조용히 잘못된 프롬프트를 만들 수 있으므로, 값이 "어딘가에 있는지"가
-        아니라 "제 자리에 있는지"를 확인해야 한다."""
+        """If two of the 8 positional arguments to build_prompt get swapped, each
+        rendered slot ends up in the wrong place. Swapping adjacent arguments
+        can silently produce a wrong prompt without raising, so check that each
+        value is "in its own slot", not merely "somewhere"."""
         helpers.git(self.repo, "checkout", "-q", "-b", "hotfix/ABC-7")
-        # subjects 슬롯과 full_examples 슬롯을 구분하기 위한 커밋 두 개.
-        # 하나는 본문 없이 제목만 있고(subjects 전용), 하나는 본문에만 있는
-        # 문구를 담는다(full_examples 전용). 두 문구는 서로 부분 문자열이
-        # 아니라서 자리가 바뀌면 반드시 엉뚱한 구역에서 검출된다.
+        # Two commits to tell the subjects slot from the full_examples slot.
+        # One has only a subject (subjects only); the other carries a phrase
+        # only in its body (full_examples only). Neither phrase is a substring
+        # of the other, so a swap always shows up in the wrong section.
         helpers.write(self.repo, "subject_marker.txt", "hi\n")
         helpers.commit(self.repo, "SUBJECT-ONLY-MARKER 커밋")
         helpers.write(self.repo, "body_marker.txt", "hi\n")
@@ -266,22 +266,22 @@ class MainTest(CliTestCase):
         self.assertEqual(code, 0)
         user = out.split("=== user ===\n", 1)[1]
 
-        # 브랜치 슬롯: 브랜치 전체 경로 형태로만 나온다 (이슈 키 슬롯과 겹치지 않는 문자열)
+        # Branch slot: appears only as the full branch path (a string that does not overlap the issue-key slot)
         self.assertIn("브랜치: hotfix/ABC-7", user)
-        # 이슈 키 슬롯: 키와 스타일 힌트(백틱 포함)로만 나온다
+        # Issue-key slot: appears only as the key plus the style hint (with backticks)
         self.assertIn(
             "이슈 키: ABC-7 — 제목 맨 앞에 `ABC-7 ` 형태로 넣어라.", user
         )
-        # mode 슬롯: 이번 변경이 staged 라는 라벨이 그대로 나온다
+        # mode slot: the label saying this change is staged appears verbatim
         self.assertIn(gitmsg._t("lbl_target") + gitmsg.mode_label("staged"), user)
-        # kept 파일: 경로와 diff 본문이 함께 있어야 한다
+        # kept file: path and diff body must both be present
         self.assertIn("- M a.txt", user)
         self.assertIn("+two", user)
-        # dropped 파일: 경로만, "(diff 생략)" 마커와 함께 나와야 한다
+        # dropped file: path only, together with the "(diff 생략)" marker
         self.assertIn("- A yarn.lock (diff 생략)", user)
 
-        # subjects 슬롯과 full_examples 슬롯: "어딘가에 있다"가 아니라
-        # "제 구역에만 있다"를 확인해야 서로 바뀌치기된 경우를 잡아낸다.
+        # subjects and full_examples slots: checking "only in its own section"
+        # rather than "somewhere" is what catches the two being swapped.
         subjects_section = user.split("## 이 저장소의 최근 커밋 제목", 1)[1]
         subjects_section = subjects_section.split("## 본문이 있는 최근 커밋", 1)[0]
         body_section = user.split("## 본문이 있는 최근 커밋", 1)[1]
@@ -339,12 +339,11 @@ class MainTest(CliTestCase):
 
 
 class RunCommitTest(unittest.TestCase):
-    """run_commit이 실제로 subprocess.call에 넘기는 argv를 검증한다.
+    """Verify the argv that run_commit actually passes to subprocess.call.
 
-    run_commit 자체를 monkeypatch하는 다른 테스트들은 이 함수 내부의
-    subprocess.call 호출문을 전혀 실행하지 않는다. -e는 이 프로젝트의
-    핵심 안전장치(확인 없이 커밋되는 경로를 막는 것)이므로, 그 인자가
-    실제로 나가는지 여기서 직접 확인한다.
+    Other tests that monkeypatch run_commit never execute the
+    subprocess.call inside it. -e is this project's key safeguard (no path
+    commits without confirmation), so check here that the flag really goes out.
     """
 
     def setUp(self):

@@ -10,7 +10,7 @@ import gitmsg
 import helpers
 
 def setUpModule():
-    # 이 기계의 로케일이나 앞서 실행된 테스트에 결과가 좌우되지 않도록 고정한다.
+    # Pin the language so results do not depend on tests that ran earlier.
     gitmsg.set_lang("ko")
 
 
@@ -59,7 +59,7 @@ class CollectDiffTest(GitTestCase):
 
         helpers.write(self.repo, "a.txt", "one\ntwo\n")
         helpers.git(self.repo, "add", "a.txt")
-        helpers.write(self.repo, "b.txt", "base\nchanged\n")  # 추적 중이나 스테이징 안 함
+        helpers.write(self.repo, "b.txt", "base\nchanged\n")  # tracked but not staged
 
         mode, files = gitmsg.collect_diff(self.repo)
         self.assertEqual(mode, "staged")
@@ -110,27 +110,27 @@ class CollectDiffTest(GitTestCase):
         self.assertEqual(files[0]["status"], "R")
 
     def test_euckr_encoded_content_does_not_crash_and_keeps_ascii_structure(self):
-        """레거시 한국 저장소에는 EUC-KR/CP949로 저장된 소스가 섞여 있다.
-        그런 바이트가 diff에 섞여 들어와도 UnicodeDecodeError로 죽으면 안
-        된다. 깨진 바이트는 대체 문자로 바뀌고, 경로나 +/- 마커 같은 ASCII
-        구조는 그대로 남아 모델이 diff를 읽는 데는 문제가 없어야 한다."""
+        """Legacy Korean repositories mix in sources saved as EUC-KR/CP949.
+        Such bytes in a diff must not crash with UnicodeDecodeError. Broken
+        bytes become replacement characters, while ASCII structure such as
+        paths and +/- markers stays intact so the model can still read the diff."""
         path = os.path.join(self.repo, "Legacy.java")
         with open(path, "wb") as fh:
             fh.write("사용자 정보 처리 및 예외 클래스 정의".encode("euc-kr"))
         helpers.git(self.repo, "add", "Legacy.java")
 
-        mode, files = gitmsg.collect_diff(self.repo)  # 예외가 나면 여기서 실패한다
+        mode, files = gitmsg.collect_diff(self.repo)  # fails here if it raises
 
         self.assertEqual(files[0]["path"], "Legacy.java")
         self.assertIn("+++ b/Legacy.java", files[0]["body"])
-        self.assertIn("�", files[0]["body"])  # 깨진 바이트는 대체 문자로 남는다
+        self.assertIn("�", files[0]["body"])  # broken bytes remain as replacement characters
 
 
 class GitProcessFailureTest(unittest.TestCase):
-    """`_git`이 subprocess 자체의 실패(예: git 실행 파일 없음)를 GitError로
-    바꾸는지 검증한다. EUC-KR 디코딩 문제와는 다른 실패 축이다 — 디코딩은
-    errors="replace"로 애초에 예외를 내지 않도록 막고, 여기서 다루는 건
-    subprocess.run이 아예 프로세스를 못 띄우는 경우다."""
+    """Verify that `_git` turns a failure of subprocess itself (e.g. no git
+    executable) into GitError. This is a different failure axis from EUC-KR
+    decoding: decoding never raises thanks to errors="replace", whereas this
+    covers subprocess.run failing to start the process at all."""
 
     def setUp(self):
         self._run = gitmsg.subprocess.run

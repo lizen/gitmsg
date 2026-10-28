@@ -15,7 +15,7 @@ MESSAGES = [{"role": "user", "content": "hi"}]
 FAKE_KEY = "sk-test-do-not-leak-12345"
 
 def setUpModule():
-    # 이 기계의 로케일이나 앞서 실행된 테스트에 결과가 좌우되지 않도록 고정한다.
+    # Pin the language so results do not depend on tests that ran earlier.
     gitmsg.set_lang("ko")
 
 
@@ -34,7 +34,7 @@ class FakeResponse:
 
 
 class RawResponse:
-    """FakeResponse처럼 흉내내지만 이미 인코딩된 바이트를 그대로 돌려준다."""
+    """Acts like FakeResponse but returns already-encoded bytes as is."""
 
     def __init__(self, raw_bytes):
         self._data = raw_bytes
@@ -197,9 +197,9 @@ class CompleteTest(ClientTestCase):
         self.assertIn("응답이", str(ctx.exception))
 
     def test_url_error_wrapped_timeout_message(self):
-        # 연결(SYN) 단계에서 타임아웃하면 urlopen이 socket.timeout을
-        # URLError로 감싸서 던지기도 한다. bare socket.timeout과 같은
-        # 안내 메시지를 내야 한다.
+        # A timeout during connect (SYN) may be raised by urlopen as
+        # socket.timeout wrapped in URLError. It must produce the same
+        # message as a bare socket.timeout.
         self.raise_with(URLError(socket.timeout()))
         with self.assertRaises(gitmsg.NativError) as ctx:
             gitmsg.complete(URL, "m1", MESSAGES)
@@ -226,8 +226,8 @@ class CompleteTest(ClientTestCase):
         self.assertEqual(captured["auth"], "Bearer test-key")
 
     def test_key_redacted_from_error_body(self):
-        # 서버가 디버그 트레이스에 요청 헤더를 반사하는 최악의 경우를
-        # 가정한다. 본문에 키가 그대로 담겨 있어도 메시지에는 남으면 안 된다.
+        # Assume the worst case: the server echoes request headers in a debug
+        # trace. Even if the body contains the key verbatim, the message must not.
         body = (
             '{"detail":"debug trace - Authorization: Bearer %s"}' % FAKE_KEY
         ).encode("utf-8")
@@ -253,14 +253,14 @@ class CompleteTest(ClientTestCase):
             self.assertNotIn(FAKE_KEY, str(ctx.exception))
 
     def test_key_never_leaks_when_it_straddles_the_200_char_truncation_boundary(self):
-        # 200자로 자르기 전에 먼저 마스킹해야 한다. 순서가 바뀌면(자르기 먼저,
-        # 마스킹 나중) 200번째 문자 경계에 걸친 키는 .replace()가 찾지 못해
-        # 앞부분 조각이 그대로 새어나간다 — --url/GITMSG_URL을 공격자가
-        # 제어하면 패딩을 조금씩 밀어가며 키 전체를 복원할 수 있다.
-        canary = "sk-test-canary-ABCDEFGHIJKLMNO"  # 30자
+        # Masking must happen before truncating to 200 chars. In the wrong order
+        # (truncate first, mask later) a key straddling the 200th char is missed
+        # by .replace() and its leading fragment leaks. If an attacker controls
+        # --url/GITMSG_URL, shifting the padding bit by bit recovers the whole key.
+        canary = "sk-test-canary-ABCDEFGHIJKLMNO"  # 30 chars
         pad = "A" * 180
         body = (pad + canary).encode("utf-8")
-        # 자르기를 먼저 하는 버그 버전이라면 body[:200]의 마지막 20글자가 샌다.
+        # A buggy version that truncates first would leak the last 20 chars of body[:200].
         leaked_fragment_if_buggy = canary[:200 - len(pad)]
 
         self.raise_with(HTTPError(URL, 500, "Internal Server Error", {}, io.BytesIO(body)))

@@ -76,7 +76,7 @@ class UiLanguageTest(LangTestCase):
 
 class CatalogTest(LangTestCase):
     def test_both_languages_have_the_same_keys(self):
-        # 한쪽에만 키가 있으면 그 언어에서 KeyError 로 죽는다.
+        # A key present in only one language raises KeyError in the other.
         self.assertEqual(
             sorted(gitmsg.MESSAGES["ko"]), sorted(gitmsg.MESSAGES["en"])
         )

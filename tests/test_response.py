@@ -8,7 +8,7 @@ import gitmsg
 
 
 def setUpModule():
-    # 이 기계의 로케일이나 앞서 실행된 테스트에 결과가 좌우되지 않도록 고정한다.
+    # Pin the language so results do not depend on tests that ran earlier.
     gitmsg.set_lang("ko")
 
 class CleanResponseTest(unittest.TestCase):
@@ -45,7 +45,7 @@ class CleanResponseTest(unittest.TestCase):
                          "ABC-1 수집 오류 수정")
 
     def test_keeps_inner_quotes(self):
-        # 따옴표가 안쪽에도 있으면 바깥쪽을 벗기지 않는다
+        # If the quote also appears inside, the outer quotes are not stripped
         text = '"경로" 처리 수정 "완료"'
         self.assertEqual(gitmsg.clean_response(text), text)
 
@@ -56,35 +56,35 @@ class CleanResponseTest(unittest.TestCase):
         self.assertEqual(gitmsg.clean_response(""), "")
 
     def test_quotes_wrapping_fence(self):
-        # 펜스가 따옴표로 감싸인 경우 둘 다 벗겨야 한다
+        # A fence wrapped in quotes: strip both
         self.assertEqual(
             gitmsg.clean_response('"```\nX\n```"'),
             "X",
         )
 
     def test_quotes_wrapping_prefix(self):
-        # 프리픽스가 따옴표로 감싸인 경우 둘 다 벗겨야 한다
+        # A prefix wrapped in quotes: strip both
         self.assertEqual(
             gitmsg.clean_response('"커밋 메시지: X"'),
             "X",
         )
 
     def test_four_backtick_fence(self):
-        # 4틱 이상의 펜스도 인식해야 한다
+        # Fences of four or more backticks must be recognized too
         self.assertEqual(
             gitmsg.clean_response("````\nX\n````"),
             "X",
         )
 
     def test_unterminated_fence(self):
-        # 종료되지 않은 펜스는 펜스 줄을 떼어내고 내용만 둔다
+        # An unterminated fence: drop the fence line and keep the content
         self.assertEqual(
             gitmsg.clean_response("```\nX"),
             "X",
         )
 
     def test_two_fences_unchanged(self):
-        # 두 개의 펜스가 있으면 어느 것이 메시지인지 모르므로 그대로 둔다
+        # With two fences it is unclear which one is the message, so leave it as is
         text = "```\nA\n```\n\n```\nB\n```"
         self.assertEqual(
             gitmsg.clean_response(text),
@@ -92,14 +92,14 @@ class CleanResponseTest(unittest.TestCase):
         )
 
     def test_six_backtick_fence(self):
-        # 6틱 펜스도 정확히 인식해야 한다 (str.count() 오버카운팅 회피)
+        # Six-backtick fences must be recognized exactly (avoids str.count() overcounting)
         self.assertEqual(
             gitmsg.clean_response("``````\nX\n``````"),
             "X",
         )
 
     def test_unterminated_six_backtick_fence(self):
-        # 미종료 6틱 펜스도 처리해야 한다
+        # Unterminated six-backtick fences must be handled too
         self.assertEqual(
             gitmsg.clean_response("``````\nX"),
             "X",
@@ -150,7 +150,7 @@ class EnforceIssueKeyTest(unittest.TestCase):
         )
 
     def test_key_substring_false_match(self):
-        # ABC-1은 ABC-18에 포함되지만, 다른 키이므로 삽입해야 한다
+        # ABC-1 appears inside ABC-18, but it is a different key, so insert it
         message = "ABC-18 무언가 수정"
         self.assertEqual(
             gitmsg.enforce_issue_key(message, "ABC-1", "prefix"),
@@ -158,7 +158,7 @@ class EnforceIssueKeyTest(unittest.TestCase):
         )
 
     def test_key_with_bracket_already_present(self):
-        # 브라켓 형태로 이미 있으면 중복하지 않는다
+        # Already present in bracket form, so do not duplicate it
         message = "[DEF-119] 갭분석 지원"
         self.assertEqual(
             gitmsg.enforce_issue_key(message, "DEF-119", "prefix"),

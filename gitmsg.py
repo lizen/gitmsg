@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Nativ 로컬 LLM으로 git 커밋 메시지 초안을 만든다."""
+"""Draft a git commit message with a Nativ local LLM."""
 
 import argparse
 import fnmatch
@@ -14,7 +14,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 # --------------------------------------------------------------------------
-# 다국어
+# Localization
 # --------------------------------------------------------------------------
 
 SUPPORTED_LANGS = ("en", "ko")
@@ -22,7 +22,7 @@ DEFAULT_LANG = "en"
 
 MESSAGES = {
     "ko": {
-        # 런타임 오류와 안내
+        # Runtime errors and notices
         "git_exec_failed": "git 명령을 실행할 수 없습니다: %s",
         "git_command_failed": "git 명령 실패: %s",
         "path_not_found": "경로를 찾을 수 없습니다: %s",
@@ -40,7 +40,7 @@ MESSAGES = {
         "nativ_no_choices": "Nativ 응답에 결과가 없습니다.",
         "empty_response": "Nativ가 빈 응답을 돌려줬습니다.",
         "unknown_lang": "지원하지 않는 언어입니다: %s (사용 가능: %s)",
-        # 진행 안내 (stderr)
+        # Progress notices (stderr)
         "status_repo": "프로젝트: %s",
         "status_analyzing": "변경 사항을 분석하는 중입니다...",
         "status_result": "권장 커밋 메시지:",
@@ -54,7 +54,7 @@ MESSAGES = {
                             "명령줄에 쓰면 ps 에 노출되므로 환경변수를 권장한다",
         "cli_print_prompt_help": "LLM 호출 없이 조립된 프롬프트만 출력",
         "cli_lang_help": "출력 언어: en|ko (기본: GITMSG_LANG 또는 en)",
-        # 프롬프트
+        # Prompt
         "sys_intro": "너는 git 커밋 메시지를 작성한다.",
         "sys_rules_head": "규칙:",
         "sys_rule_plain": "- 출력은 커밋 메시지 그 자체다. 설명이나 인사말을 덧붙이지 않는다.",
@@ -146,34 +146,34 @@ MESSAGES = {
     },
 }
 
-# 실행 중 한 번만 정해진다. main() 이 설정하고 _t() 가 읽는다.
-# CLI 는 한 번 실행에 한 언어이므로 인자로 끌고 다니지 않는다.
+# Set once per run: main() sets it and _t() reads it.
+# A CLI run uses a single language, so it is not passed around as an argument.
 _LANG = DEFAULT_LANG
 
 
 def set_lang(lang: str) -> None:
-    """출력 언어를 정한다. 안내 문구와 커밋 메시지가 같은 언어를 쓴다."""
+    """Set the output language. Notices and the commit message share it."""
     global _LANG
     _LANG = lang
 
 
 def _t(key: str) -> str:
-    """현재 언어의 문구를 돌려준다."""
+    """Return the message for the current language."""
     return MESSAGES[_LANG][key]
 
 
-set_lang(DEFAULT_LANG)  # import 시점 기본값. main() 이 다시 정한다.
+set_lang(DEFAULT_LANG)  # Import-time default. main() sets it again.
 
 
 # --------------------------------------------------------------------------
-# 이슈 키
+# Issue keys
 # --------------------------------------------------------------------------
 
 ISSUE_KEY_RE = re.compile(r"[A-Z][A-Z0-9]+-\d+")
 
 
 def extract_issue_key(branch: str) -> Optional[str]:
-    """브랜치명에서 첫 번째 이슈 키를 찾는다. 없으면 None."""
+    """Find the first issue key in a branch name. None if there is none."""
     if not branch:
         return None
     match = ISSUE_KEY_RE.search(branch)
@@ -181,10 +181,10 @@ def extract_issue_key(branch: str) -> Optional[str]:
 
 
 def detect_key_style(subjects: "list[str]") -> str:
-    """커밋 제목들에서 이슈 키가 놓이는 위치의 최빈 스타일을 고른다.
+    """Pick the most common issue-key placement style from commit subjects.
 
-    세 스타일 어디에도 맞지 않는 제목은 세지 않는다.
-    셀 것이 하나도 없으면 "prefix"로 둔다.
+    Subjects that match none of the three styles are not counted.
+    If nothing was counted, fall back to "prefix".
     """
     counts = {"bracket": 0, "prefix": 0, "suffix": 0}
     for subject in subjects:
@@ -209,7 +209,7 @@ def detect_key_style(subjects: "list[str]") -> str:
 
 
 class GitError(Exception):
-    """git 명령이 실패했거나 저장소가 아닐 때."""
+    """Raised when a git command fails or the path is not a repository."""
 
 
 def _git(repo: str, *args: str) -> str:
@@ -229,7 +229,7 @@ def _git(repo: str, *args: str) -> str:
 
 
 def resolve_repo(path: str) -> str:
-    """경로가 속한 git 저장소의 최상위 디렉터리를 돌려준다."""
+    """Return the top-level directory of the git repository containing path."""
     target = os.path.abspath(path or ".")
     if not os.path.isdir(target):
         raise GitError(_t("path_not_found") % target)
@@ -237,17 +237,17 @@ def resolve_repo(path: str) -> str:
 
 
 def current_branch(repo: str) -> str:
-    """현재 브랜치명. detached HEAD면 빈 문자열."""
+    """Current branch name. Empty string on a detached HEAD."""
     return _git(repo, "branch", "--show-current").strip()
 
 
 def _path_from_diff_header(line: str) -> str:
-    """'diff --git a/foo b/foo' 에서 경로를 뽑는다.
+    """Extract the path from 'diff --git a/foo b/foo'.
 
-    `_git`가 core.quotePath=false, diff.mnemonicPrefix=false,
-    diff.noprefix=false를 강제하므로 한글 등 non-ASCII 경로도 quoting 없이
-    'a/', 'b/' 접두사 그대로 나온다. 다만 경로 자체에 문자 그대로 ' b/' 가
-    들어있으면 여전히 잘못 잘릴 수 있다. 실무에서 거의 없는 형태라 감수한다.
+    `_git` forces core.quotePath=false, diff.mnemonicPrefix=false and
+    diff.noprefix=false, so non-ASCII paths (Korean, etc.) come out unquoted
+    with plain 'a/' and 'b/' prefixes. A path that literally contains ' b/'
+    can still be split wrongly. That is rare in practice, so we accept it.
     """
     parts = line.rstrip("\n").split(" b/", 1)
     return parts[1] if len(parts) == 2 else line.strip()
@@ -283,7 +283,7 @@ def _statuses(repo: str, cached: bool) -> "dict[str, str]":
 
 
 def collect_diff(repo: str) -> "tuple[str, list[dict]]":
-    """staged 변경을 우선 보고, 없으면 추적 중인 변경으로 내려간다."""
+    """Prefer staged changes; fall back to tracked changes if there are none."""
     for mode, cached in (("staged", True), ("worktree", False)):
         args = ["diff", "--unified=3", "--no-color"]
         if cached:
@@ -300,10 +300,11 @@ def collect_diff(repo: str) -> "tuple[str, list[dict]]":
 
 
 def collect_examples(repo: str, n: int = 25) -> "tuple[list[str], list[str]]":
-    """저장소 히스토리에서 few-shot 예시를 모은다.
+    """Collect few-shot examples from the repository history.
 
-    subjects 는 스타일 학습용 제목 목록, full_examples 는 본문 스타일을
-    보여줄 전문 예시다. 본문이 있는 커밋은 흔치 않아 최대 3건만 쓴다.
+    subjects is a list of subjects for learning the style; full_examples are
+    whole commits that show the body style. Commits with a body are rare,
+    so at most 3 are used.
     """
     subjects = []
     raw_subjects = _git(repo, "log", "--no-merges", "--pretty=%s", "-n", str(n))
@@ -317,7 +318,7 @@ def collect_examples(repo: str, n: int = 25) -> "tuple[list[str], list[str]]":
     for chunk in raw_full.split("\x00"):
         block = chunk.strip()
         if not block or "\n" not in block:
-            continue  # 본문이 없는 커밋
+            continue  # commit without a body
         full.append(block)
         if len(full) == 3:
             break
@@ -326,7 +327,7 @@ def collect_examples(repo: str, n: int = 25) -> "tuple[list[str], list[str]]":
 
 
 # --------------------------------------------------------------------------
-# diff 선별과 예산
+# Diff selection and budget
 # --------------------------------------------------------------------------
 
 NOISE_PATTERNS = [
@@ -343,7 +344,7 @@ NOISE_DIRS = ["dist", "build", "target", "node_modules", ".idea"]
 
 _SHRINK_FLOOR = 200
 def _omitted_body() -> str:
-    """본문을 통째로 버릴 때 남기는 표시."""
+    """Marker left behind when a body is dropped entirely."""
     return _t("omitted_body")
 
 
@@ -362,7 +363,7 @@ def _is_noise(path: str, body: str) -> bool:
 
 
 def filter_noise_files(files: "list[dict]") -> "tuple[list[dict], list[dict]]":
-    """diff 본문을 프롬프트에 넣을 것과 파일명만 남길 것으로 가른다."""
+    """Split diffs into bodies that go into the prompt and files kept by name only."""
     kept, dropped = [], []
     for item in files:
         (dropped if _is_noise(item["path"], item["body"]) else kept).append(item)
@@ -388,13 +389,13 @@ def _truncate(body: str, limit: int) -> str:
 def apply_budget(
     files: "list[dict]", per_file: int = 6000, total: int = 48000
 ) -> "list[dict]":
-    """파일당 상한을 먼저 적용하고, 총량이 넘으면 큰 파일부터 절반씩 줄인다.
+    """Apply the per-file cap first, then halve the largest files while over budget.
 
-    작은 파일이 온전히 남도록 큰 파일부터 줄인다. 작은 변경일수록 의도가
-    분명해서 메시지 품질에 더 기여한다.
+    Large files shrink first so that small ones stay intact. Small changes
+    state their intent more clearly and contribute more to message quality.
 
-    한계: 결과는 filecount × len(생략 표시) 이하로 갈 수 없다. 대부분의
-    커밋(~5000 파일 이하)에서는 예산을 지키지만, 매우 큰 커밋은 초과할 수 있다.
+    Limit: the result cannot go below filecount × len(omission marker). Most
+    commits (up to ~5000 files) stay within budget; very large ones may exceed it.
     """
     result = []
     for item in files:
@@ -404,7 +405,7 @@ def apply_budget(
     def size():
         return sum(len(f["body"]) for f in result)
 
-    # 1단계: 큰 파일부터 절반씩. 작은 파일이 온전히 남도록.
+    # Step 1: halve the largest files first, so small files stay intact.
     while size() > total:
         largest = max(result, key=lambda f: len(f["body"]))
         if len(largest["body"]) <= _SHRINK_FLOOR:
@@ -412,11 +413,12 @@ def apply_budget(
         largest["body"] = _truncate(largest["body"], len(largest["body"]) // 2)
         largest["truncated"] = True
 
-    # 2단계: 전부 바닥에 닿고도 예산을 넘으면 큰 것부터 본문을 통째로 버린다.
+    # Step 2: if still over budget once everything hits the floor, drop whole
+    # bodies, largest first.
     while size() > total:
         largest = max(result, key=lambda f: len(f["body"]))
         if largest["body"] == _omitted_body():
-            break  # 더 버릴 것이 없다
+            break  # nothing left to drop
         largest["body"] = _omitted_body()
         largest["truncated"] = True
 
@@ -424,13 +426,14 @@ def apply_budget(
 
 
 # --------------------------------------------------------------------------
-# 프롬프트
+# Prompt
 # --------------------------------------------------------------------------
 
 def build_system_prompt() -> str:
-    """system 프롬프트를 현재 언어로 조립한다.
+    """Assemble the system prompt in the current language.
 
-    프롬프트 전체를 현재 언어로 쓰고, 커밋 메시지 언어도 그 언어로 못 박는다.
+    The whole prompt is written in the current language, and the commit
+    message language is pinned to it as well.
     """
     lang_rule = _t("sys_lang_" + _LANG)
     return "\n".join([
@@ -448,12 +451,12 @@ def build_system_prompt() -> str:
 
 
 def key_style_hint(style: str) -> str:
-    """이슈 키를 어디에 넣을지 알려주는 문구."""
+    """Instruction telling the model where to put the issue key."""
     return _t("key_style_" + style)
 
 
 def mode_label(mode: str) -> str:
-    """대상 변경분의 이름."""
+    """Label for the set of changes being described."""
     return _t("mode_" + mode)
 
 
@@ -467,7 +470,7 @@ def build_prompt(
     kept: "list[dict]",
     dropped: "list[dict]",
 ) -> "list[dict]":
-    """system/user 두 개짜리 messages 배열을 만든다."""
+    """Build the two-entry system/user messages array."""
     parts = []
 
     if subjects:
@@ -512,7 +515,7 @@ def build_prompt(
 
 
 # --------------------------------------------------------------------------
-# Nativ 클라이언트
+# Nativ client
 # --------------------------------------------------------------------------
 
 DEFAULT_URL = "http://127.0.0.1:8080"
@@ -520,7 +523,7 @@ DEFAULT_TIMEOUT = 180
 
 
 class NativError(Exception):
-    """Nativ 로컬 API 호출이 실패했을 때."""
+    """Raised when a call to the Nativ local API fails."""
 
 
 def _request(url: str, path: str, payload, timeout: int, api_key: Optional[str] = None):
@@ -550,7 +553,7 @@ def _request(url: str, path: str, payload, timeout: int, api_key: Optional[str] 
         return data
     except HTTPError as error:
         if error.code == 401:
-            # 키 값 자체는 절대 출력하지 않는다
+            # Never print the key value itself
             raise NativError(_t("nativ_unauthorized"))
         detail = ""
         try:
@@ -582,7 +585,7 @@ def pick_model(
     api_key: Optional[str] = None,
     timeout: int = 10,
 ) -> str:
-    """모델을 고른다. 지정이 없으면 로드된 첫 번째를 쓴다."""
+    """Pick a model. Without an explicit choice, use the first loaded one."""
     if explicit:
         return explicit
     models = list_models(url, api_key, timeout)
@@ -613,7 +616,7 @@ def complete(
 
 
 # --------------------------------------------------------------------------
-# 응답 후처리
+# Response post-processing
 # --------------------------------------------------------------------------
 
 FENCE_RE = re.compile(r"\A(`{3,})[a-zA-Z0-9_+-]*\n(.*?)\n?\1\s*\Z", re.S)
@@ -622,12 +625,12 @@ PREFIX_RE = re.compile(r"\A(커밋\s*메시지|commit\s*message)\s*[:：]\s*", r
 
 
 def _fence_runs(text: str) -> int:
-    """연속된 3개 이상 백틱 런의 개수를 센다 (count() 오버카운팅 회피)."""
+    """Count runs of three or more backticks (avoids count() overcounting)."""
     return len(FENCE_RUN_RE.findall(text))
 
 
 def _strip_fence(text: str) -> str:
-    """여는/닫는 펜스가 정확히 한 쌍일 때만 벗긴다."""
+    """Strip the fence only when there is exactly one opening/closing pair."""
     if _fence_runs(text) != 2:
         return text
     match = FENCE_RE.match(text)
@@ -635,24 +638,24 @@ def _strip_fence(text: str) -> str:
 
 
 def _strip_quotes(text: str) -> str:
-    """따옴표로 감싸진 경우 안쪽에 같은 따옴표가 없을 때만 벗긴다."""
+    """Strip surrounding quotes only when the same quote does not appear inside."""
     if len(text) >= 2 and text[0] == text[-1] and text[0] in "\"'":
         inner = text[1:-1]
-        if text[0] not in inner:  # 안쪽에도 있으면 본문의 일부다
+        if text[0] not in inner:  # if it also appears inside, it is part of the body
             return inner.strip()
     return text
 
 
 def clean_response(text: str) -> str:
-    """모델이 감싸서 내놓은 것을 벗겨낸다.
+    """Strip the wrapping the model put around its output.
 
-    중첩된 래핑(예: 따옴표로 감싼 펜스)에 대응하기 위해 고정점까지 반복한다.
-    두 개 이상의 펜스가 있으면 어느 것이 메시지인지 모르므로 그대로 둔다.
-    미종료 펜스는 펜스 줄만 제거하고 내용을 유지한다.
+    Repeats until a fixed point to handle nested wrapping (e.g. a fence in quotes).
+    With two or more fences it is unclear which one is the message, so the text
+    is left as is. For an unterminated fence, only the fence line is removed.
     """
     result = (text or "").strip()
 
-    # 고정점에 도달할 때까지 반복 (최대 5회)
+    # Repeat until a fixed point (at most 5 times)
     for _ in range(5):
         before = result
         result = PREFIX_RE.sub("", result).strip()
@@ -661,7 +664,7 @@ def clean_response(text: str) -> str:
         if result == before:
             break
 
-    # 미종료 펜스 처리: 펜스 줄만 제거 (다중 펜스는 제외)
+    # Unterminated fence: remove only the fence line (not for multiple fences)
     if _fence_runs(result) <= 1:
         lines = result.split("\n")
         if lines and lines[0].startswith("```"):
@@ -674,10 +677,10 @@ def clean_response(text: str) -> str:
 
 
 def enforce_issue_key(message: str, key: Optional[str], style: str) -> str:
-    """제목 줄에 이슈 키가 없으면 감지된 스타일로 붙인다.
+    """Add the issue key to the subject line in the detected style if it is missing.
 
-    key 가 None 이면 아무것도 하지 않는다. 키를 지어내지 않기 위해서다.
-    키는 단어 경계로 매칭된다: ABC-1은 ABC-18에 포함되지 않는다.
+    Does nothing when key is None, so that a key is never invented.
+    Keys match on word boundaries: ABC-1 is not found inside ABC-18.
     """
     if not key or not message:
         return message
@@ -685,7 +688,7 @@ def enforce_issue_key(message: str, key: Optional[str], style: str) -> str:
     lines = message.split("\n")
     subject = lines[0]
 
-    # 단어 경계를 고려한 키 검사
+    # Key check that respects word boundaries
     key_pattern = (
         r"(?<![A-Za-z0-9-])" + re.escape(key) + r"(?![0-9])"
     )
@@ -730,15 +733,15 @@ def resolve_url(explicit: Optional[str]) -> str:
 
 
 def resolve_api_key(explicit: Optional[str]) -> Optional[str]:
-    """API 키를 찾는다. 기본값은 없다 — 코드에 키를 박지 않는다."""
+    """Find the API key. There is no default, so no key is hard-coded."""
     return explicit or os.environ.get("NATIV_API_KEY") or None
 
 
 def resolve_lang(explicit: Optional[str]) -> str:
-    """출력 언어를 정한다. --lang > GITMSG_LANG > en.
+    """Resolve the output language: --lang > GITMSG_LANG > en.
 
-    모르는 값이면 조용히 넘기지 않고 ValueError 를 낸다. 잘못된 설정으로
-    엉뚱한 언어가 나오는 것보다 즉시 알려주는 편이 낫다.
+    An unknown value raises ValueError instead of passing silently. Failing
+    fast beats quietly producing the wrong language from a bad setting.
     """
     lang = explicit or os.environ.get("GITMSG_LANG") or DEFAULT_LANG
     lang = lang.strip().lower()
@@ -748,12 +751,13 @@ def resolve_lang(explicit: Optional[str]) -> str:
 
 
 def run_commit(repo: str, message: str) -> int:
-    """에디터를 띄운다. 확인 없이 커밋되는 경로는 만들지 않는다."""
+    """Open the editor. There is no path that commits without confirmation."""
     return subprocess.call(["git", "-C", repo, "commit", "-e", "-m", message])
 
 
 def main(argv=None) -> int:
-    # help 문구도 번역 대상이라 파싱 전에 한 번 잡고, 파싱 후 플래그로 덮어쓴다.
+    # Help text is translated too, so pick a language before parsing and
+    # override it with the flag afterwards.
     try:
         set_lang(resolve_lang(None))
     except ValueError as error:
@@ -768,8 +772,8 @@ def main(argv=None) -> int:
         print(str(error), file=sys.stderr)
         return 1
 
-    # 커밋이 하나도 없는 저장소에서는 git log 도 실패한다.
-    # 수집 단계 전체를 한 번에 감싸 트레이스백 대신 안내를 내보낸다.
+    # git log fails too in a repository with no commits. Wrap the whole
+    # collection step so the user gets a message instead of a traceback.
     try:
         repo = resolve_repo(args.path)
         print(_t("status_repo") % repo, file=sys.stderr)
@@ -816,7 +820,7 @@ def main(argv=None) -> int:
     if args.edit:
         return run_commit(repo, result)
 
-    # 안내는 stderr, 메시지는 stdout. 파이프로 넘기면 메시지만 간다.
+    # Notices go to stderr, the message to stdout. Piping passes only the message.
     print("\n" + _t("status_result"), file=sys.stderr)
     print(result)
     return 0

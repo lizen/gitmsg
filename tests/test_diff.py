@@ -8,7 +8,7 @@ import gitmsg
 
 
 def setUpModule():
-    # 이 기계의 로케일이나 앞서 실행된 테스트에 결과가 좌우되지 않도록 고정한다.
+    # Pin the language so results do not depend on tests that ran earlier.
     gitmsg.set_lang("ko")
 
 def make_file(path, body="@@ -1 +1 @@\n+x\n", status="M"):
@@ -52,7 +52,7 @@ class FilterNoiseFilesTest(unittest.TestCase):
         self.assertEqual([f["path"] for f in dropped], ["docs/logo.png"])
 
     def test_keeps_sql_files(self):
-        # example 계열에서는 쿼리 변경이 커밋의 핵심인 경우가 많다
+        # In example-style projects, the query change is often the point of the commit
         files = [make_file("migration/001_alter.sql")]
         kept, dropped = gitmsg.filter_noise_files(files)
         self.assertEqual([f["path"] for f in kept], ["migration/001_alter.sql"])
@@ -65,14 +65,14 @@ class FilterNoiseFilesTest(unittest.TestCase):
         self.assertEqual(dropped[0]["status"], "M")
 
     def test_file_named_build_is_not_noise(self):
-        # 파일명이 build/dist/target이지만 디렉터리가 아님
+        # Named build/dist/target, but not a directory
         files = [make_file("build")]
         kept, dropped = gitmsg.filter_noise_files(files)
         self.assertEqual([f["path"] for f in kept], ["build"])
         self.assertEqual(dropped, [])
 
     def test_file_inside_build_dir_is_noise(self):
-        # src/build/x.js는 여전히 노이즈
+        # src/build/x.js is still noise
         files = [make_file("src/build/x.js")]
         kept, dropped = gitmsg.filter_noise_files(files)
         self.assertEqual(kept, [])
@@ -88,7 +88,7 @@ class ApplyBudgetTest(unittest.TestCase):
         self.assertFalse(result[1]["truncated"])
 
     def test_truncates_per_file_cap(self):
-        files = [make_file("big.py", "line\n" * 3000)]  # 15,000자
+        files = [make_file("big.py", "line\n" * 3000)]  # 15,000 chars
         result = gitmsg.apply_budget(files, per_file=6000, total=48000)
         self.assertLessEqual(len(result[0]["body"]), 6000)
         self.assertTrue(result[0]["truncated"])
@@ -113,46 +113,46 @@ class ApplyBudgetTest(unittest.TestCase):
         self.assertEqual(gitmsg.apply_budget([]), [])
 
     def test_many_files_respects_budget(self):
-        # 회귀 테스트: 2000개 파일로도 예산을 지켜야 함
+        # Regression test: the budget must hold even with 2000 files
         files = [make_file("f%d.py" % i, "x" * 201) for i in range(2000)]
         result = gitmsg.apply_budget(files, per_file=6000, total=48000)
         total_size = sum(len(f["body"]) for f in result)
         self.assertLessEqual(total_size, 48000)
 
     def test_truncate_respects_limit(self):
-        # 6001자를 6000으로 자르면 6000 이하
+        # Truncating 6001 chars to 6000 leaves at most 6000
         body = "x" * 6001
         result = gitmsg.apply_budget([make_file("a.py", body)], per_file=6000, total=48000)
         self.assertLessEqual(len(result[0]["body"]), 6000)
 
     def test_omitted_line_count_accuracy(self):
-        # 보고된 생략 줄 수가 실제 생략된 줄 수와 정확히 일치해야 함
-        # 이는 경계에서 +1 오류를 감지하는 회귀 테스트
+        # The reported omitted line count must match the actual count exactly.
+        # Regression test for an off-by-one at the boundary.
         import re
-        body = "line\n" * 2000  # 2000개 완전한 줄
+        body = "line\n" * 2000  # 2000 complete lines
         total_lines = body.count("\n")  # 2000
 
-        # 생략을 강제하기 위해 per_file을 작게 설정
+        # Keep per_file small to force omission
         result = gitmsg.apply_budget([make_file("a.py", body)], per_file=3000, total=48000)
         truncated = result[0]["body"]
 
-        # 마커에서 보고된 생략 줄 수 추출
+        # Extract the omitted line count reported in the marker
         match = re.search(r'\.\.\..*?(\d+)줄 생략', truncated)
         self.assertIsNotNone(match, "생략 마커를 찾을 수 없음")
         reported_omitted = int(match.group(1))
 
-        # 실제 생략된 줄 수 계산
-        # 마커 앞의 content를 추출
+        # Count the lines actually omitted
+        # Take the content before the marker
         head = truncated.split("... (")[0].rstrip("\n")
 
-        # head의 줄 수 = 뉴라인 개수로 정확히 계산
-        # rstrip 후 head는 항상 \n으로 끝나지 않으므로
-        # tail.count("\n") + tail.endswith("\n") 계산과 대응되도록
+        # Count head lines exactly as the number of newlines.
+        # After rstrip, head never ends with \n, which mirrors
+        # the tail.count("\n") + tail.endswith("\n") calculation
         lines_in_head = head.count("\n") if head else 0
 
         actual_omitted = total_lines - lines_in_head
 
-        # 보고된 것과 실제가 정확히 일치해야 함
+        # Reported and actual must match exactly
         self.assertEqual(reported_omitted, actual_omitted,
             f"보고: {reported_omitted}줄, 실제: {actual_omitted}줄")
 
