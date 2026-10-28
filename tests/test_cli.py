@@ -42,6 +42,8 @@ class CliTestCase(unittest.TestCase):
         self._run_commit = gitmsg.run_commit
         os.environ.pop("GITMSG_URL", None)
         os.environ.pop("NATIV_API_KEY", None)
+        # main() 은 GITMSG_LANG 으로 언어를 다시 정한다. 한국어 문구를 검사하므로 고정한다.
+        os.environ["GITMSG_LANG"] = "ko"
 
     def tearDown(self):
         gitmsg.urlopen = self._urlopen
@@ -49,6 +51,8 @@ class CliTestCase(unittest.TestCase):
         shutil.rmtree(self.tmp, ignore_errors=True)
         os.environ.pop("GITMSG_URL", None)
         os.environ.pop("NATIV_API_KEY", None)
+        os.environ.pop("GITMSG_LANG", None)
+        gitmsg.set_lang("ko")
 
     def stage_a_change(self):
         helpers.write(self.repo, "a.txt", "one\ntwo\n")
@@ -179,6 +183,35 @@ class MainTest(CliTestCase):
         code, out, _ = self.run_main([self.repo])
         self.assertEqual(code, 0)
         self.assertEqual(out.strip(), "두 번째 줄 추가")
+
+    def test_shows_progress_and_result_header_on_stderr(self):
+        """진행 안내는 stderr 로만 나가야 파이프(gitmsg | pbcopy)가 깨지지 않는다."""
+        self.stage_a_change()
+        self.answer("두 번째 줄 추가")
+        code, out, err = self.run_main([self.repo])
+        self.assertEqual(code, 0)
+        self.assertIn(gitmsg.resolve_repo(self.repo), err)
+        self.assertIn("분석하는 중", err)
+        self.assertIn("권장 커밋 메시지", err)
+        self.assertEqual(out.strip(), "두 번째 줄 추가")
+
+    def test_default_output_is_english(self):
+        os.environ.pop("GITMSG_LANG", None)
+        self.stage_a_change()
+        self.answer("Add second line")
+        code, out, err = self.run_main([self.repo])
+        self.assertEqual(code, 0)
+        self.assertIn("Project: ", err)
+        self.assertIn("Suggested commit message:", err)
+        self.assertEqual(out.strip(), "Add second line")
+
+    def test_lang_flag_switches_output_to_korean(self):
+        os.environ.pop("GITMSG_LANG", None)
+        self.stage_a_change()
+        self.answer("두 번째 줄 추가")
+        code, _, err = self.run_main([self.repo, "--lang", "ko"])
+        self.assertEqual(code, 0)
+        self.assertIn("권장 커밋 메시지", err)
 
     def test_enforces_issue_key_from_branch(self):
         helpers.git(self.repo, "checkout", "-q", "-b", "feature/DEF-119")

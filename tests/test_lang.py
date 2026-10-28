@@ -31,18 +31,20 @@ def build(lang, **overrides):
 
 class LangTestCase(unittest.TestCase):
     def setUp(self):
-        for name in ("GITMSG_LANG", "LC_ALL", "LC_MESSAGES", "LANG"):
-            os.environ.pop(name, None)
+        os.environ.pop("GITMSG_LANG", None)
 
     def tearDown(self):
-        for name in ("GITMSG_LANG", "LC_ALL", "LC_MESSAGES", "LANG"):
-            os.environ.pop(name, None)
+        os.environ.pop("GITMSG_LANG", None)
         gitmsg.set_lang("ko")
 
 
 class ResolveLangTest(LangTestCase):
-    def test_default_is_auto(self):
-        self.assertEqual(gitmsg.resolve_lang(None), "auto")
+    def test_default_is_en(self):
+        self.assertEqual(gitmsg.resolve_lang(None), "en")
+
+    def test_auto_is_no_longer_supported(self):
+        with self.assertRaises(ValueError):
+            gitmsg.resolve_lang("auto")
 
     def test_env_is_used(self):
         os.environ["GITMSG_LANG"] = "en"
@@ -65,24 +67,6 @@ class ResolveLangTest(LangTestCase):
 
 
 class UiLanguageTest(LangTestCase):
-    def test_auto_follows_locale(self):
-        os.environ["LANG"] = "ko_KR.UTF-8"
-        gitmsg.set_lang("auto")
-        self.assertEqual(gitmsg._UI_LANG, "ko")
-        os.environ["LANG"] = "en_US.UTF-8"
-        gitmsg.set_lang("auto")
-        self.assertEqual(gitmsg._UI_LANG, "en")
-
-    def test_auto_falls_back_to_en_for_unknown_locale(self):
-        os.environ["LANG"] = "fr_FR.UTF-8"
-        gitmsg.set_lang("auto")
-        self.assertEqual(gitmsg._UI_LANG, "en")
-
-    def test_explicit_lang_ignores_locale(self):
-        os.environ["LANG"] = "en_US.UTF-8"
-        gitmsg.set_lang("ko")
-        self.assertEqual(gitmsg._UI_LANG, "ko")
-
     def test_runtime_message_follows_ui_language(self):
         gitmsg.set_lang("ko")
         self.assertIn("변경", gitmsg._t("no_changes"))
@@ -113,19 +97,6 @@ class CatalogTest(LangTestCase):
 
 
 class PromptLanguageTest(LangTestCase):
-    def test_auto_tells_model_to_follow_history(self):
-        # auto 는 UI 언어를 로케일에서 가져오므로 로케일을 명시해 결정적으로 만든다.
-        os.environ["LANG"] = "ko_KR.UTF-8"
-        system = build("auto")[0]["content"]
-        self.assertIn("같은 언어", system)
-        self.assertNotIn("반드시 한국어", system)
-
-    def test_auto_in_english_locale_still_follows_history(self):
-        os.environ["LANG"] = "en_US.UTF-8"
-        system = build("auto")[0]["content"]
-        self.assertIn("same language as this repository", system)
-        self.assertNotIn("Write in English, even if", system)
-
     def test_ko_pins_korean(self):
         system = build("ko")[0]["content"]
         self.assertIn("반드시 한국어", system)

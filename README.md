@@ -24,22 +24,22 @@ Python은 macOS 기본 `python3`면 된다. 외부 의존성이 없어 가상환
 
 ## 언어 설정
 
-출력 언어는 `auto`(기본), `ko`, `en` 중에서 고른다.
+출력 언어는 `en`(기본)과 `ko` 중에서 고른다. 안내 문구와 커밋 메시지가 모두
+이 설정을 따른다.
 
 ```bash
-gitmsg --lang en          # 이번 한 번만 영어로
+gitmsg                    # 영어로 (기본)
+gitmsg --lang ko          # 이번 한 번만 한국어로
 export GITMSG_LANG=ko     # 항상 한국어로
 ```
 
-| 값 | 커밋 메시지 | 오류·도움말 |
+| 값 | 커밋 메시지 | 안내·오류·도움말 |
 |---|---|---|
-| `auto` | 저장소 히스토리와 같은 언어 | 시스템 로케일, 모르면 영어 |
+| `en` (기본) | 영어로 고정 | 영어 |
 | `ko` | 한국어로 고정 | 한국어 |
-| `en` | 영어로 고정 | 영어 |
 
-`auto`는 저장소가 쓰던 언어를 그대로 따라간다. 대부분은 이걸로 충분하다. 다만
-**커밋이 거의 없는 새 저장소**나 **여러 언어가 섞인 히스토리**에서는 기댈 예시가
-없거나 애매하므로, 그럴 때 `ko`나 `en`으로 고정하면 된다.
+저장소 히스토리가 한국어여도 옵션을 주지 않으면 영어로 나온다. 한국어 저장소를
+주로 다룬다면 `GITMSG_LANG=ko`를 셸 설정에 넣어 두는 편이 편하다.
 
 다른 언어를 추가하려면 `gitmsg.py`의 `MESSAGES` 딕셔너리에 키를 하나 더 넣고
 `SUPPORTED_LANGS`에 코드를 추가하면 된다. 두 언어의 키 집합과 `%s`/`%d` 개수가
@@ -70,6 +70,19 @@ gitmsg -e
 gitmsg --print-prompt
 ```
 
+실행하면 대상 프로젝트 경로와 진행 상황을 먼저 보여 주고, 끝나면 결과를 따로 구분해 출력한다.
+
+```
+Project: /Users/me/work/example-backend
+Analyzing changes...
+
+Suggested commit message:
+ABC-102 Handle missing user in findById
+```
+
+안내 문구는 stderr로, 커밋 메시지만 stdout으로 나간다. 그래서 `gitmsg | pbcopy`처럼
+파이프로 넘기면 메시지만 복사된다.
+
 | 옵션 | 설명 |
 |---|---|
 | `PATH` | 대상 저장소 경로. 생략하면 현재 디렉터리 |
@@ -77,7 +90,7 @@ gitmsg --print-prompt
 | `--model ID` | 모델 지정. 생략하면 로드된 첫 번째 |
 | `--url URL` | Nativ 주소. `GITMSG_URL` 환경변수로도 지정 가능 |
 | `--api-key KEY` | Nativ API 키. 생략하면 `NATIV_API_KEY` 환경변수. 평소 사용에는 권장하지 않음 — `ps`와 셸 히스토리에 노출됨 |
-| `--lang {auto,ko,en}` | 출력 언어. 생략하면 `GITMSG_LANG` 환경변수, 그것도 없으면 `auto` |
+| `--lang {en,ko}` | 출력 언어. 생략하면 `GITMSG_LANG` 환경변수, 그것도 없으면 `en` |
 | `--print-prompt` | 조립된 프롬프트만 출력하고 끝낸다 |
 
 ## 동작
